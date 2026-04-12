@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
 import org.jetlinks.community.auth.entity.AppUserEntity;
@@ -188,6 +189,7 @@ public class AppUserDeviceController {
 
     @Getter
     @Setter
+    @NoArgsConstructor
     public static class DeviceBindingInfo {
         @Schema(description = "设备绑定信息")
         private AppUserDeviceEntity binding;
