@@ -1,0 +1,295 @@
+/*
+ * Copyright 2025 JetLinks https://www.jetlinks.cn
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.jetlinks.community.auth.configuration;
+
+import lombok.extern.slf4j.Slf4j;
+import org.hswebframework.web.authorization.Authentication;
+import org.hswebframework.web.authorization.simple.SimpleAuthentication;
+import org.hswebframework.web.authorization.simple.SimplePermission;
+import org.hswebframework.web.authorization.simple.SimpleUser;
+import org.jetlinks.community.auth.entity.ApiClientEntity;
+import org.jetlinks.community.auth.entity.PermissionInfo;
+import org.jetlinks.community.auth.enums.ApiClientState;
+import org.jetlinks.community.auth.service.ApiClientAccessLogService;
+import org.jetlinks.community.auth.service.ApiClientRateLimiter;
+import org.jetlinks.community.auth.service.ApiClientService;
+import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+import reactor.core.publisher.Mono;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * API 客户端认证过滤器
+ * <p>
+ * 支持两种认证模式：
+ * <ol>
+ *   <li><b>Bearer Token</b>：请求头 {@code Authorization: Bearer {token}}，Token 由
+ *       {@link ApiClientTokenService#issueToken(String)} 颁发，TTL 24h。</li>
+ *   <li><b>签名模式</b>：请求头 {@code X-Client-Id: {secretId}}、
+ *       {@code X-Client-Sign: {sign}}、{@code X-Timestamp: {epochMs}}，
+ *       签名 = {@code HMAC-SHA256(secretKey, "{secretId}:{timestamp}")}。</li>
+ * </ol>
+ * 认证成功后将构造 {@link Authentication} 注入 ReactorContext，后续接口透明使用。
+ * </p>
+ *
+ * @author jetlinks
+ * @since 2.3
+ */
+@Slf4j
+public class ApiClientAuthFilter implements WebFilter {
+
+    /**
+     * 过滤器执行顺序，位于 TraceWebFilter（HIGHEST_PRECEDENCE+100）之后
+     */
+    public static final int ORDER = Integer.MIN_VALUE + 200;
+
+    /**
+     * 签名有效期（毫秒），防重放
+     */
+    private static final long SIGN_VALID_MILLIS = 5 * 60 * 1000L;
+
+    private final ApiClientService apiClientService;
+    private final ApiClientTokenService apiClientTokenService;
+    private final ApiClientRateLimiter rateLimiter;
+    private final ApiClientAccessLogService accessLogService;
+
+    public ApiClientAuthFilter(ApiClientService apiClientService,
+                                ApiClientTokenService apiClientTokenService,
+                                ApiClientRateLimiter rateLimiter,
+                                ApiClientAccessLogService accessLogService) {
+        this.apiClientService = apiClientService;
+        this.apiClientTokenService = apiClientTokenService;
+        this.rateLimiter = rateLimiter;
+        this.accessLogService = accessLogService;
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        HttpHeaders headers = request.getHeaders();
+
+        // 尝试 Bearer Token 模式
+        String authorizationHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
+        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
+            String token = authorizationHeader.substring(7).trim();
+            return handleBearerToken(token, exchange, chain);
+        }
+
+        // 尝试签名模式
+        String clientId = headers.getFirst("X-Client-Id");
+        if (StringUtils.hasText(clientId)) {
+            String sign = headers.getFirst("X-Client-Sign");
+            String timestamp = headers.getFirst("X-Timestamp");
+            return handleSignature(clientId, sign, timestamp, exchange, chain);
+        }
+
+        // 不是 API 客户端请求，透传给原有认证链
+        return chain.filter(exchange);
+    }
+
+    // ----------------------------- Bearer Token 模式 -----------------------------
+
+    private Mono<Void> handleBearerToken(String token,
+                                         ServerWebExchange exchange,
+                                         WebFilterChain chain) {
+        return apiClientTokenService
+            .getClientByToken(token)
+            .flatMap(client -> authenticate(client, exchange, chain))
+            .switchIfEmpty(Mono.defer(() -> chain.filter(exchange)));
+    }
+
+    // ----------------------------- 签名模式 -----------------------------
+
+    private Mono<Void> handleSignature(String secretId,
+                                       String sign,
+                                       String timestamp,
+                                       ServerWebExchange exchange,
+                                       WebFilterChain chain) {
+        if (!StringUtils.hasText(sign) || !StringUtils.hasText(timestamp)) {
+            return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
+        }
+
+        // 验证时间戳防重放
+        long ts;
+        try {
+            ts = Long.parseLong(timestamp);
+        } catch (NumberFormatException e) {
+            return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
+        }
+        if (Math.abs(System.currentTimeMillis() - ts) > SIGN_VALID_MILLIS) {
+            return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
+        }
+
+        return apiClientService
+            .getBySecretId(secretId)
+            .flatMap(client -> {
+                // 验证签名
+                String expected = hmacSha256(client.getSecretKey(), secretId + ":" + timestamp);
+                if (!expected.equals(sign)) {
+                    return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
+                }
+                return authenticate(client, exchange, chain);
+            })
+            .switchIfEmpty(writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid"));
+    }
+
+    // ----------------------------- 通用认证 -----------------------------
+
+    private Mono<Void> authenticate(ApiClientEntity client,
+                                    ServerWebExchange exchange,
+                                    WebFilterChain chain) {
+        if (client.getState() == ApiClientState.disabled) {
+            return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
+        }
+
+        // IP 白名单校验
+        if (StringUtils.hasText(client.getIpWhiteList())) {
+            String remoteIp = getClientIp(exchange.getRequest());
+            boolean allowed = false;
+            for (String ip : client.getIpWhiteList().split(",")) {
+                if (ip.trim().equals(remoteIp)) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_ip_not_allowed");
+            }
+        }
+
+        // 频率限制
+        int rateLimit = client.getRateLimit() == null ? 0 : client.getRateLimit();
+        Authentication auth = buildAuthentication(client);
+        String ip = getClientIp(exchange.getRequest());
+        String path = exchange.getRequest().getPath().value();
+        String method = exchange.getRequest().getMethod().name();
+
+        return rateLimiter
+            .checkAndIncrement(client.getId(), rateLimit)
+            .then(chain
+                .filter(exchange)
+                .contextWrite(ctx -> ctx.put(Authentication.class, auth))
+                .doFinally(signal -> {
+                    // 异步记录访问日志
+                    int status = exchange.getResponse().getStatusCode() != null
+                        ? exchange.getResponse().getStatusCode().value() : 200;
+                    accessLogService.asyncRecord(
+                        client.getId(), client.getName(), path, method, ip, status);
+                }))
+            .onErrorResume(e -> {
+                if (e instanceof org.hswebframework.web.exception.BusinessException) {
+                    String code = e.getMessage();
+                    if ("error.api_client_rate_limit_exceeded".equals(code)) {
+                        return writeError(exchange, HttpStatus.TOO_MANY_REQUESTS, code);
+                    }
+                }
+                return Mono.error(e);
+            });
+    }
+
+    /**
+     * 根据 API 客户端配置构建 Authentication 对象
+     */
+    private Authentication buildAuthentication(ApiClientEntity client) {
+        SimpleUser user = new SimpleUser();
+        user.setId(client.getId());
+        user.setName(client.getName());
+        user.setUsername(client.getSecretId());
+        user.setUserType("api-client");
+
+        SimpleAuthentication auth = new SimpleAuthentication();
+        auth.setUser(user);
+
+        List<PermissionInfo> permissions = client.getPermissions();
+        if (!CollectionUtils.isEmpty(permissions)) {
+            List<org.hswebframework.web.authorization.Permission> permList = permissions
+                .stream()
+                .map(p -> SimplePermission
+                    .builder()
+                    .id(p.getPermission())
+                    .name(p.getName() != null ? p.getName() : p.getPermission())
+                    .actions(p.getActions() != null ? p.getActions() : Collections.emptySet())
+                    .build())
+                .collect(Collectors.toList());
+            auth.setPermissions(permList);
+        } else {
+            auth.setPermissions(Collections.emptyList());
+        }
+        auth.setDimensions(Collections.emptyList());
+
+        return auth;
+    }
+
+    /**
+     * HMAC-SHA256 签名
+     */
+    private String hmacSha256(String key, String data) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            javax.crypto.spec.SecretKeySpec secretKey =
+                new javax.crypto.spec.SecretKeySpec(key.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKey);
+            byte[] bytes = mac.doFinal(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC-SHA256 error", e);
+        }
+    }
+
+    /**
+     * 获取客户端真实 IP
+     */
+    private String getClientIp(ServerHttpRequest request) {
+        String xForwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
+        if (StringUtils.hasText(xForwardedFor)) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIp = request.getHeaders().getFirst("X-Real-IP");
+        if (StringUtils.hasText(xRealIp)) {
+            return xRealIp;
+        }
+        return request.getRemoteAddress() != null
+            ? request.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+    }
+
+    /**
+     * 返回 JSON 格式的错误响应
+     */
+    private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, String errorCode) {
+        exchange.getResponse().setStatusCode(status);
+        exchange.getResponse().getHeaders().add(HttpHeaders.CONTENT_TYPE, "application/json;charset=UTF-8");
+        String body = "{\"status\":" + status.value() + ",\"code\":\"" + errorCode + "\",\"message\":\"" + errorCode + "\"}";
+        org.springframework.core.io.buffer.DataBuffer buffer = exchange.getResponse()
+            .bufferFactory()
+            .wrap(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return exchange.getResponse().writeWith(Mono.just(buffer));
+    }
+
+}

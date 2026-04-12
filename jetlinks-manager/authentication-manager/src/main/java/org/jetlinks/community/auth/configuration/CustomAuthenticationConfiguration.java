@@ -16,11 +16,21 @@
 package org.jetlinks.community.auth.configuration;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
+import org.hswebframework.web.authorization.Authentication;
+import org.hswebframework.web.authorization.ReactiveAuthenticationHolder;
+import org.hswebframework.web.authorization.ReactiveAuthenticationSupplier;
 import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.authorization.token.redis.RedisUserTokenManager;
 import org.hswebframework.web.authorization.token.redis.SimpleUserToken;
+import org.jetlinks.community.auth.configuration.ApiClientAuthFilter;
+import org.jetlinks.community.auth.configuration.AppUserAuthFilter;
 import org.jetlinks.community.auth.dimension.UserAuthenticationEventPublisher;
 import org.jetlinks.community.auth.enums.UserEntityType;
+import org.jetlinks.community.auth.service.ApiClientAccessLogService;
+import org.jetlinks.community.auth.service.ApiClientRateLimiter;
+import org.jetlinks.community.auth.service.ApiClientService;
+import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.jetlinks.community.auth.service.AppUserService;
 import org.jetlinks.community.auth.web.WebFluxUserController;
 import org.jetlinks.core.event.EventBus;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -30,7 +40,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
@@ -80,4 +92,54 @@ public class CustomAuthenticationConfiguration {
             builder.deserializerByType(UserEntityType.class, new UserEntityTypeJSONDeserializer());
         };
     }
+
+    /**
+     * 注册 C 端用户认证过滤器
+     */
+    @Bean
+    @Order(AppUserAuthFilter.ORDER)
+    public AppUserAuthFilter appUserAuthFilter(AppUserService appUserService,
+                                               UserTokenManager userTokenManager) {
+        return new AppUserAuthFilter(appUserService, userTokenManager);
+    }
+
+    /**
+     * 注册 API 客户端认证过滤器
+     */
+    @Bean
+    @Order(ApiClientAuthFilter.ORDER)
+    public ApiClientAuthFilter apiClientAuthFilter(ApiClientService apiClientService,
+                                                   ApiClientTokenService apiClientTokenService,
+                                                   ApiClientRateLimiter apiClientRateLimiter,
+                                                   ApiClientAccessLogService accessLogService) {
+        return new ApiClientAuthFilter(apiClientService, apiClientTokenService, apiClientRateLimiter, accessLogService);
+    }
+
+    /**
+     * 注册从 ReactorContext 读取 API 客户端 Authentication 的 Supplier
+     * 在应用启动时通过 static 初始化块注册，确保与 UserToken 体系并行工作
+     */
+    @Bean
+    public ApiClientReactiveAuthSupplierRegistrar apiClientAuthSupplierRegistrar() {
+        ReactiveAuthenticationHolder.addSupplier(new ReactiveAuthenticationSupplier() {
+            @Override
+            public Mono<Authentication> get(String userId) {
+                return Mono.empty();
+            }
+
+            @Override
+            public Mono<Authentication> get() {
+                return Mono.deferContextual(ctx -> Mono
+                    .justOrEmpty(ctx.getOrEmpty(Authentication.class)));
+            }
+        });
+        return new ApiClientReactiveAuthSupplierRegistrar();
+    }
+
+    /**
+     * 标记类，仅用于触发 Supplier 注册，无实际逻辑
+     */
+    static class ApiClientReactiveAuthSupplierRegistrar {
+    }
+
 }
