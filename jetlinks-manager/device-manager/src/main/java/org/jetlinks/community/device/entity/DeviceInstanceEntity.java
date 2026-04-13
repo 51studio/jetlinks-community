@@ -17,6 +17,7 @@ package org.jetlinks.community.device.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.commons.collections.MapUtils;
 import org.hswebframework.ezorm.rdb.mapping.annotation.*;
@@ -59,6 +60,7 @@ import java.util.stream.Stream;
 
 @Getter
 @Setter
+@NoArgsConstructor
 @Table(name = "dev_device_instance", indexes = {
     @Index(name = "idx_dev_product_id", columnList = "product_id"),
     @Index(name = "idx_dev_parent_id", columnList = "parent_id"),

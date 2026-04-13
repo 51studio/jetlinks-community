@@ -47,6 +47,11 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
      * <p>relationType 默认为 {@link AppUserDeviceRelationType#bind}；
      *    bind/share 类型需传入 operatorId；
      *    manage 类型 operatorId 应为空。</p>
+     * <p>业务规则：</p>
+     * <ul>
+     *   <li>如果设备没有任何绑定关系，第一个绑定者自动升级为 manage 类型</li>
+     *   <li>有且只有一个绑定者的 relationType 可以为 manage</li>
+     * </ul>
      *
      * @param entity 绑定关系实体（userId、deviceId、deviceName、productId 已填充）
      * @return 绑定后的实体
@@ -56,35 +61,67 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
         if (entity.getRelationType() == null) {
             entity.setRelationType(AppUserDeviceRelationType.bind);
         }
+        
+        // 检查该设备是否已有绑定关系
         return this
             .createQuery()
-            .where(AppUserDeviceEntity::getUserId, entity.getUserId())
-            .and(AppUserDeviceEntity::getDeviceId, entity.getDeviceId())
+            .where(AppUserDeviceEntity::getDeviceId, entity.getDeviceId())
             .count()
             .flatMap(count -> {
-                if (count > 0) {
-                    return Mono.error(new BusinessException("error.app_user_device_already_bound", 409));
+                // 如果是第一个绑定者，自动升级为 manage
+                if (count == 0) {
+                    entity.setRelationType(AppUserDeviceRelationType.manage);
+                    entity.setOperatorId(null); // manage 类型 operatorId 应为空
+                    return this
+                        .insert(Mono.just(entity))
+                        .thenReturn(entity);
                 }
+                
+                // 检查是否已经绑定过
                 return this
-                    .insert(Mono.just(entity))
-                    .thenReturn(entity);
+                    .createQuery()
+                    .where(AppUserDeviceEntity::getUserId, entity.getUserId())
+                    .and(AppUserDeviceEntity::getDeviceId, entity.getDeviceId())
+                    .count()
+                    .flatMap(userBindCount -> {
+                        if (userBindCount > 0) {
+                            return Mono.error(new BusinessException("error.app_user_device_already_bound", 409));
+                        }
+                        return this
+                            .insert(Mono.just(entity))
+                            .thenReturn(entity);
+                    });
             });
     }
 
     /**
      * 解绑设备
+     * <p>业务规则：</p>
+     * <ul>
+     *   <li>relationType 为 manage 的绑定人不能直接解绑</li>
+     *   <li>需要先通过 {@link #transferManage(String, String, String)} 转移管理权限</li>
+     * </ul>
      *
      * @param userId   C 端用户 ID
      * @param deviceId 设备 ID
      */
     public Mono<Void> unbindDevice(String userId, String deviceId) {
         return assertOwnership(userId, deviceId)
-            .then(this
-                .createDelete()
-                .where(AppUserDeviceEntity::getUserId, userId)
-                .and(AppUserDeviceEntity::getDeviceId, deviceId)
-                .execute()
-                .then());
+            .flatMap(binding -> {
+                // 管理者不能直接解绑
+                if (binding.getRelationType() == AppUserDeviceRelationType.manage) {
+                    return Mono.error(new BusinessException(
+                        "error.app_user_device_manage_cannot_unbind", 
+                        403,
+                        "管理者不能直接解绑，请先转移管理权限"));
+                }
+                return this
+                    .createDelete()
+                    .where(AppUserDeviceEntity::getUserId, userId)
+                    .and(AppUserDeviceEntity::getDeviceId, deviceId)
+                    .execute()
+                    .then();
+            });
     }
 
     // -----------------------------------------------------------------------
@@ -191,6 +228,97 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
                     .execute()
                     .then();
             }));
+    }
+
+    // -----------------------------------------------------------------------
+    // 管理权限转移
+    // -----------------------------------------------------------------------
+
+    /**
+     * 转移设备管理权限
+     * <p>将当前用户的管理权限转移给另一个已绑定该设备的用户。</p>
+     * <p>业务规则：</p>
+     * <ul>
+     *   <li>当前用户必须是 manage 类型</li>
+     *   <li>目标用户必须是该设备的 bind 类型绑定者</li>
+     *   <li>转移后，当前用户变为 bind 类型，目标用户变为 manage 类型</li>
+     * </ul>
+     *
+     * @param currentManagerUserId 当前管理者用户 ID
+     * @param deviceId             设备 ID
+     * @param newManagerUserId     新管理者用户 ID（必须是 bind 类型的绑定者）
+     * @return 转移完成后的 Mono
+     */
+    public Mono<Void> transferManage(String currentManagerUserId, String deviceId, String newManagerUserId) {
+        // 验证当前用户是管理者
+        return assertOwnership(currentManagerUserId, deviceId)
+            .flatMap(currentBinding -> {
+                if (currentBinding.getRelationType() != AppUserDeviceRelationType.manage) {
+                    return Mono.error(new BusinessException(
+                        "error.app_user_device_not_manager", 
+                        403,
+                        "只有管理者才能转移管理权限"));
+                }
+                
+                // 验证目标用户是 bind 类型的绑定者
+                return getBinding(newManagerUserId, deviceId)
+                    .switchIfEmpty(Mono.error(new BusinessException(
+                        "error.app_user_device_target_not_bound", 
+                        404,
+                        "目标用户未绑定该设备")))
+                    .flatMap(targetBinding -> {
+                        if (targetBinding.getRelationType() != AppUserDeviceRelationType.bind) {
+                            return Mono.error(new BusinessException(
+                                "error.app_user_device_target_not_bind_type", 
+                                400,
+                                "只能将管理权限转移给 bind 类型的绑定者"));
+                        }
+                        
+                        // 执行权限转移：当前管理者降为 bind，目标用户升级为 manage
+                        return this
+                            .createUpdate()
+                            .set(AppUserDeviceEntity::getRelationType, AppUserDeviceRelationType.bind)
+                            .set(AppUserDeviceEntity::getOperatorId, newManagerUserId)
+                            .where(AppUserDeviceEntity::getUserId, currentManagerUserId)
+                            .and(AppUserDeviceEntity::getDeviceId, deviceId)
+                            .execute()
+                            .then(this
+                                .createUpdate()
+                                .set(AppUserDeviceEntity::getRelationType, AppUserDeviceRelationType.manage)
+                                .set(AppUserDeviceEntity::getOperatorId, null)
+                                .where(AppUserDeviceEntity::getUserId, newManagerUserId)
+                                .and(AppUserDeviceEntity::getDeviceId, deviceId)
+                                .execute()
+                                .then());
+                    });
+            });
+    }
+
+    /**
+     * 查询设备的所有绑定关系
+     *
+     * @param deviceId 设备 ID
+     * @return 绑定关系列表
+     */
+    public Flux<AppUserDeviceEntity> getByDeviceId(String deviceId) {
+        return this
+            .createQuery()
+            .where(AppUserDeviceEntity::getDeviceId, deviceId)
+            .fetch();
+    }
+
+    /**
+     * 查询设备的管理者
+     *
+     * @param deviceId 设备 ID
+     * @return 管理者绑定关系（如果存在）
+     */
+    public Mono<AppUserDeviceEntity> getDeviceManager(String deviceId) {
+        return this
+            .createQuery()
+            .where(AppUserDeviceEntity::getDeviceId, deviceId)
+            .and(AppUserDeviceEntity::getRelationType, AppUserDeviceRelationType.manage)
+            .fetchOne();
     }
 
 }
