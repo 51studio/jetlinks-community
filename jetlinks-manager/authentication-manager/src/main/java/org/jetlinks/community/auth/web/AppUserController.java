@@ -39,7 +39,7 @@ import reactor.core.publisher.Mono;
  */
 @RestController
 @RequestMapping("/app/user")
-@Tag(name = "C端用户接口")
+@Tag(name = "第三方用户接口")
 @AllArgsConstructor
 public class AppUserController {
 
@@ -55,7 +55,7 @@ public class AppUserController {
      * 注册
      */
     @PostMapping("/register")
-    @Operation(summary = "C端用户注册")
+    @Operation(summary = "第三方用户注册")
     public Mono<AppUserEntity> register(@RequestBody AppUserEntity entity) {
         return appUserService.register(entity);
     }
@@ -64,7 +64,7 @@ public class AppUserController {
      * 登录
      */
     @PostMapping("/login")
-    @Operation(summary = "C端用户登录，返回 token 和 userId")
+    @Operation(summary = "第三方用户登录，返回 token 和 userId")
     public Mono<LoginResponse> login(@RequestBody LoginRequest request) {
         return appUserService
             .login(request.getUsername(), request.getPassword())
@@ -79,7 +79,7 @@ public class AppUserController {
      * 登出
      */
     @PostMapping("/logout")
-    @Operation(summary = "C端用户登出")
+    @Operation(summary = "第三方用户登出")
     public Mono<Void> logout() {
         return currentAppUser()
             .flatMap(ignored ->

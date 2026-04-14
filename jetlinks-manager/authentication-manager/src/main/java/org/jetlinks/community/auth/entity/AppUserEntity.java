@@ -47,7 +47,7 @@ import jakarta.validation.constraints.NotBlank;
     @Index(name = "idx_app_user_phone", columnList = "phone"),
     @Index(name = "idx_app_user_email", columnList = "email")
 })
-@Comment("C端用户信息表")
+@Comment("第三方用户信息表")
 @EnableEntityEvent
 public class AppUserEntity extends GenericEntity<String> implements RecordCreationEntity, RecordModifierEntity {
 

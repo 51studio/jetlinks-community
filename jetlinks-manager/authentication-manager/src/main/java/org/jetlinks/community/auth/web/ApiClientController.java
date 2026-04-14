@@ -45,7 +45,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * API 客户端（第三方系统对接）管理接口
+ * 第三方应用管理接口
  *
  * @author jetlinks
  * @since 2.3
@@ -54,7 +54,7 @@ import lombok.Setter;
 @RequestMapping("/open-api/client")
 @AllArgsConstructor
 @Resource(id = "open-api", name = "应用管理", group = "system")
-@Tag(name = "第三方系统对接（API客户端）")
+@Tag(name = "第三方应用管理")
 public class ApiClientController implements ReactiveServiceCrudController<ApiClientEntity, String> {
 
     private final ApiClientService apiClientService;
@@ -69,37 +69,37 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     }
 
     /**
-     * 新增 API 客户端，自动生成 SecretId（AccessKey）
+     * 新增 第三方应用，自动生成 appId
      */
     @PostMapping
     @SaveAction
-    @Operation(summary = "新增API客户端")
+    @Operation(summary = "新增第三方应用")
     public Mono<ApiClientEntity> add(@RequestBody Mono<ApiClientEntity> body) {
         return body.flatMap(apiClientService::createClient);
     }
 
     /**
-     * 启用 API 客户端
+     * 启用 第三方应用
      */
     @PostMapping("/{id}/_enable")
     @SaveAction
-    @Operation(summary = "启用API客户端")
-    public Mono<Void> enable(@PathVariable @Parameter(description = "客户端ID") String id) {
+    @Operation(summary = "启用第三方应用")
+    public Mono<Void> enable(@PathVariable @Parameter(description = "应用ID") String id) {
         return apiClientService.enable(id);
     }
 
     /**
-     * 禁用 API 客户端
+     * 禁用 第三方应用
      */
     @PostMapping("/{id}/_disable")
     @SaveAction
-    @Operation(summary = "禁用API客户端")
-    public Mono<Void> disable(@PathVariable @Parameter(description = "客户端ID") String id) {
+    @Operation(summary = "禁用第三方应用")
+    public Mono<Void> disable(@PathVariable @Parameter(description = "应用ID") String id) {
         return apiClientService.disable(id);
     }
 
     /**
-     * 生成/重置 AccessKey + SecretKey
+     * 生成/重置 appId + SecretKey
      * SecretKey 明文仅此次响应中返回，请妥善保存
      */
     @PostMapping("/{id}/_generate-keys")
@@ -110,7 +110,7 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     }
 
     /**
-     * 为 API 客户端颁发 Bearer Token（TTL 24h）
+     * 为 第三方应用颁发 Bearer Token（TTL 24h）
      */
     @PostMapping("/{id}/_issue-token")
     @SaveAction
@@ -120,11 +120,11 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     }
 
     /**
-     * 查询指定客户端的调用记录（分页）
+     * 查询指定第三方应用的调用记录（分页）
      */
     @PostMapping("/{id}/access-log/_query")
     @QueryAction
-    @Operation(summary = "查询API客户端调用记录")
+    @Operation(summary = "查询第三方应用调用记录")
     public Mono<PagerResult<ApiClientAccessLogEntity>> queryAccessLog(
         @PathVariable @Parameter(description = "客户端ID") String id,
         @RequestBody Mono<QueryParamEntity> query) {

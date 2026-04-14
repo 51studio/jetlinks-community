@@ -43,7 +43,7 @@ import reactor.core.publisher.Mono;
  */
 @RestController
 @RequestMapping("/app/user/device")
-@Tag(name = "C端用户设备绑定接口")
+@Tag(name = "第三方用户设备绑定接口")
 @AllArgsConstructor
 public class AppUserDeviceController {
 

@@ -47,8 +47,8 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/app/user/admin")
 @AllArgsConstructor
-@Resource(id = "app-user", name = "C端用户管理", group = "system")
-@Tag(name = "C端用户管理（管理员）")
+@Resource(id = "app-user", name = "第三方用户管理", group = "system")
+@Tag(name = "第三方用户管理（管理员）")
 public class AppUserAdminController implements ReactiveServiceCrudController<AppUserEntity, String> {
 
     private final AppUserService appUserService;
@@ -68,7 +68,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @PostMapping("/{id}/_enable")
     @SaveAction
-    @Operation(summary = "启用C端用户")
+    @Operation(summary = "启用第三方用户")
     public Mono<Void> enable(@PathVariable @Parameter(description = "用户ID") String id) {
         return appUserService
             .createUpdate()
@@ -84,7 +84,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @PostMapping("/{id}/_disable")
     @SaveAction
-    @Operation(summary = "禁用C端用户")
+    @Operation(summary = "禁用第三方用户")
     public Mono<Void> disable(@PathVariable @Parameter(description = "用户ID") String id) {
         return appUserService
             .createUpdate()
@@ -104,7 +104,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @PostMapping("/{id}/password/_reset")
     @SaveAction
-    @Operation(summary = "管理员重置C端用户密码")
+    @Operation(summary = "管理员重置第三方用户密码")
     public Mono<Void> resetPassword(
         @PathVariable @Parameter(description = "用户ID") String id,
         @RequestBody ResetPasswordRequest request) {
@@ -128,7 +128,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @GetMapping("/{userId}/devices")
     @QueryAction
-    @Operation(summary = "查询指定C端用户的设备列表")
+    @Operation(summary = "查询指定第三方用户的设备列表")
     public Flux<AppUserDeviceEntity> listDevices(
         @PathVariable @Parameter(description = "用户ID") String userId) {
         return deviceService.getByUserId(userId);
@@ -139,7 +139,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @PostMapping("/{userId}/devices/_query/no-paging")
     @QueryAction
-    @Operation(summary = "条件查询指定C端用户的设备关联列表（不分页）")
+    @Operation(summary = "条件查询指定第三方用户的设备关联列表（不分页）")
     public Flux<AppUserDeviceEntity> queryDevicesNoPaging(
         @PathVariable @Parameter(description = "用户ID") String userId,
         @RequestBody Mono<QueryParamEntity> query) {
@@ -154,7 +154,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @PostMapping("/{userId}/devices")
     @SaveAction
-    @Operation(summary = "管理员为指定C端用户绑定设备")
+    @Operation(summary = "管理员为指定第三方用户绑定设备")
     public Mono<AppUserDeviceEntity> bindDevice(
         @PathVariable @Parameter(description = "用户ID") String userId,
         @RequestBody AdminBindDeviceRequest request) {
@@ -174,7 +174,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
      */
     @DeleteMapping("/{userId}/devices/{deviceId}")
     @DeleteAction
-    @Operation(summary = "管理员解绑C端用户的设备")
+    @Operation(summary = "管理员解绑第三方用户的设备")
     public Mono<Void> unbindDevice(
         @PathVariable @Parameter(description = "用户ID") String userId,
         @PathVariable @Parameter(description = "设备ID") String deviceId) {

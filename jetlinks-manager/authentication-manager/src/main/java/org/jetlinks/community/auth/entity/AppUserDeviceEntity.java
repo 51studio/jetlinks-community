@@ -47,7 +47,7 @@ import jakarta.validation.constraints.NotBlank;
     @Index(name = "idx_app_user_device_did", columnList = "device_id"),
     @Index(name = "idx_app_user_device_uid_did", columnList = "user_id,device_id", unique = true)
 })
-@Comment("C端用户设备绑定关联表")
+@Comment("第三方用户设备绑定关联表")
 @EnableEntityEvent
 public class AppUserDeviceEntity extends GenericEntity<String> {
 
