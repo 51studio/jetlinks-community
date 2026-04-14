@@ -70,7 +70,7 @@ public class ApiClientService extends GenericReactiveCrudService<ApiClientEntity
     }
 
     /**
-     * 根据 AppId（AccessKey）查询客户端，结果缓存 Redis 5 分钟
+     * 根据 AppId 查询客户端，结果缓存 Redis 5 分钟
      *
      * @param appId AppId
      * @return 客户端实体

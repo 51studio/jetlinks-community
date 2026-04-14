@@ -91,7 +91,7 @@ public class AppUserAuthFilter implements WebFilter {
                         if (appUser.getStatus() == null || appUser.getStatus() == 0) {
                             return writeError(exchange, HttpStatus.FORBIDDEN, "error.app_user_disabled");
                         }
-                        return apiClientService.getByClientId(appUser.getClientId())
+                        return apiClientService.getByAppId(appUser.getClientId())
                             .flatMap(client -> {
                                 if (client.getState() != ApiClientState.enabled) {
                                     return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
