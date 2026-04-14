@@ -18,6 +18,7 @@ package org.jetlinks.community.auth.configuration;
 import lombok.extern.slf4j.Slf4j;
 import org.hswebframework.web.authorization.Authentication;
 import org.hswebframework.web.authorization.ReactiveAuthenticationManager;
+import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.authorization.simple.SimpleAuthentication;
 import org.hswebframework.web.authorization.simple.SimplePermission;
 import org.hswebframework.web.authorization.simple.SimpleUser;
@@ -49,9 +50,9 @@ import java.util.stream.Collectors;
  * <ol>
  *   <li><b>Bearer Token</b>：请求头 {@code Authorization: Bearer {token}}，Token 由
  *       {@link ApiClientTokenService#issueToken(String)} 颁发，TTL 24h。</li>
- *   <li><b>签名模式</b>：请求头 {@code X-Client-Id: {secretId}}、
+ *   <li><b>签名模式</b>：请求头 {@code X-Client-Id: {appId}}、
  *       {@code X-Client-Sign: {sign}}、{@code X-Timestamp: {epochMs}}，
- *       签名 = {@code HMAC-SHA256(secretKey, "{secretId}:{timestamp}")}。</li>
+ *       签名 = {@code HMAC-SHA256(secretKey, "{appId}:{timestamp}")}。</li>
  * </ol>
  * 认证成功后将构造 {@link Authentication} 注入 ReactorContext，后续接口透明使用。
  * </p>
@@ -77,17 +78,20 @@ public class ApiClientAuthFilter implements WebFilter {
     private final ApiClientRateLimiter rateLimiter;
     private final ApiClientAccessLogService accessLogService;
     private final ReactiveAuthenticationManager authenticationManager;
+    private final UserTokenManager userTokenManager;
 
     public ApiClientAuthFilter(ApiClientService apiClientService,
-                                 ApiClientTokenService apiClientTokenService,
-                                 ApiClientRateLimiter rateLimiter,
-                                 ApiClientAccessLogService accessLogService,
-                                 ReactiveAuthenticationManager authenticationManager) {
+                               ApiClientTokenService apiClientTokenService,
+                               ApiClientRateLimiter rateLimiter,
+                               ApiClientAccessLogService accessLogService,
+                               ReactiveAuthenticationManager authenticationManager,
+                               UserTokenManager userTokenManager) {
         this.apiClientService = apiClientService;
         this.apiClientTokenService = apiClientTokenService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
         this.authenticationManager = authenticationManager;
+        this.userTokenManager = userTokenManager;
     }
 
     @Override
@@ -119,15 +123,23 @@ public class ApiClientAuthFilter implements WebFilter {
     private Mono<Void> handleBearerToken(String token,
                                          ServerWebExchange exchange,
                                          WebFilterChain chain) {
-        return apiClientTokenService
-            .getClientByToken(token)
-            .flatMap(client -> authenticate(client, exchange, chain))
+        return userTokenManager
+            .getByToken(token)
+            .flatMap(userToken -> {
+                if (!"api-client".equals(userToken.getType())) {
+                    return chain.filter(exchange);
+                }
+                return userTokenManager
+                    .touch(userToken.getToken())
+                    .then(apiClientService.getByClientId(userToken.getUserId()))
+                    .flatMap(client -> authenticate(client, exchange, chain));
+            })
             .switchIfEmpty(Mono.defer(() -> chain.filter(exchange)));
     }
 
     // ----------------------------- 签名模式 -----------------------------
 
-    private Mono<Void> handleSignature(String secretId,
+    private Mono<Void> handleSignature(String appId,
                                        String sign,
                                        String timestamp,
                                        ServerWebExchange exchange,
@@ -148,10 +160,10 @@ public class ApiClientAuthFilter implements WebFilter {
         }
 
         return apiClientService
-            .getBySecretId(secretId)
+            .getByAppId(appId)
             .flatMap(client -> {
                 // 验证签名
-                String expected = hmacSha256(client.getSecretKey(), secretId + ":" + timestamp);
+                String expected = hmacSha256(client.getSecretKey(), appId + ":" + timestamp);
                 if (!expected.equals(sign)) {
                     return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
                 }
@@ -193,7 +205,7 @@ public class ApiClientAuthFilter implements WebFilter {
                 SimpleUser user = new SimpleUser();
                 user.setId(client.getId());
                 user.setName(client.getName());
-                user.setUsername(client.getSecretId());
+                user.setUsername(client.getAppId());
                 user.setUserType("api-client");
                 if (auth instanceof SimpleAuthentication) {
                     ((SimpleAuthentication) auth).setUser(user);
@@ -233,7 +245,7 @@ public class ApiClientAuthFilter implements WebFilter {
         SimpleUser user = new SimpleUser();
         user.setId(client.getId());
         user.setName(client.getName());
-        user.setUsername(client.getSecretId());
+        user.setUsername(client.getAppId());
         user.setUserType("api-client");
 
         SimpleAuthentication auth = new SimpleAuthentication();

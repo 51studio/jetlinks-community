@@ -16,9 +16,9 @@
 package org.jetlinks.community.auth.service;
 
 import lombok.AllArgsConstructor;
+import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.id.IDGenerator;
 import org.jetlinks.community.auth.entity.ApiClientEntity;
-import org.springframework.data.redis.core.ReactiveRedisOperations;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -37,10 +37,10 @@ import java.time.Duration;
 @AllArgsConstructor
 public class ApiClientTokenService {
 
-    private static final String TOKEN_KEY_PREFIX = "api_client:token:";
-    private static final Duration TOKEN_TTL = Duration.ofHours(24);
+    private static final String TOKEN_TYPE = "api-client";
+    private static final long TOKEN_TTL = Duration.ofHours(24).toMillis();
 
-    private final ReactiveRedisOperations<Object, Object> redis;
+    private final UserTokenManager userTokenManager;
     private final ApiClientService apiClientService;
 
     /**
@@ -51,11 +51,9 @@ public class ApiClientTokenService {
      */
     public Mono<String> issueToken(String clientId) {
         String token = IDGenerator.MD5.generate() + IDGenerator.MD5.generate();
-        String key = TOKEN_KEY_PREFIX + token;
-        return redis
-            .opsForValue()
-            .set(key, clientId, TOKEN_TTL)
-            .thenReturn(token);
+        return userTokenManager
+            .signIn(token, TOKEN_TYPE, clientId, TOKEN_TTL)
+            .map(userToken -> userToken.getToken());
     }
 
     /**
@@ -65,9 +63,7 @@ public class ApiClientTokenService {
      * @param token Bearer Token
      */
     public Mono<Void> revokeToken(String token) {
-        return redis
-            .delete(TOKEN_KEY_PREFIX + token)
-            .then();
+        return userTokenManager.signOutByToken(token);
     }
 
     /**
@@ -78,17 +74,10 @@ public class ApiClientTokenService {
      * @return Token（不存在时返回 empty）
      */
     public Mono<String> getTokenByClientId(String clientId) {
-        return redis
-            .scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
-                                                                 .match(TOKEN_KEY_PREFIX + "*")
-                                                                 .build())
-            .filter(key -> key instanceof String)
-            .cast(String.class)
-            .flatMap(key -> redis
-                .opsForValue()
-                .get(key)
-                .filter(value -> clientId.equals(value))
-                .map(value -> key.substring(TOKEN_KEY_PREFIX.length())))
+        return userTokenManager
+            .getByUserId(clientId)
+            .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
+            .map(userToken -> userToken.getToken())
             .next();
     }
 
@@ -102,12 +91,10 @@ public class ApiClientTokenService {
      * @return API 客户端实体，Token 无效或已过期时返回 empty
      */
     public Mono<ApiClientEntity> getClientByToken(String token) {
-        return redis
-            .opsForValue()
-            .get(TOKEN_KEY_PREFIX + token)
-            .filter(value -> value instanceof String)
-            .cast(String.class)
-            .flatMap(apiClientService::getByClientId);
+        return userTokenManager
+            .getByToken(token)
+            .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
+            .flatMap(userToken -> apiClientService.getByClientId(userToken.getUserId()));
     }
 
     /**

@@ -98,8 +98,9 @@ public class CustomAuthenticationConfiguration {
     @Bean
     @Order(AppUserAuthFilter.ORDER)
     public AppUserAuthFilter appUserAuthFilter(AppUserService appUserService,
-                                               UserTokenManager userTokenManager) {
-        return new AppUserAuthFilter(appUserService, userTokenManager);
+                                               UserTokenManager userTokenManager,
+                                               ApiClientService apiClientService) {
+        return new AppUserAuthFilter(appUserService, userTokenManager, apiClientService);
     }
 
     /**
@@ -111,8 +112,14 @@ public class CustomAuthenticationConfiguration {
                                                    ApiClientTokenService apiClientTokenService,
                                                    ApiClientRateLimiter apiClientRateLimiter,
                                                    ApiClientAccessLogService accessLogService,
-                                                   ReactiveAuthenticationManager reactiveAuthenticationManager) {
-        return new ApiClientAuthFilter(apiClientService, apiClientTokenService, apiClientRateLimiter, accessLogService, reactiveAuthenticationManager);
+                                                   ReactiveAuthenticationManager reactiveAuthenticationManager,
+                                                   UserTokenManager userTokenManager) {
+        return new ApiClientAuthFilter(apiClientService,
+                                       apiClientTokenService,
+                                       apiClientRateLimiter,
+                                       accessLogService,
+                                       reactiveAuthenticationManager,
+                                       userTokenManager);
     }
 
     /**

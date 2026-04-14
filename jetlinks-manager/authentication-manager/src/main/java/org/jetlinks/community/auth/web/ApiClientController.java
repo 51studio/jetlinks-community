@@ -19,22 +19,27 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import org.hswebframework.ezorm.core.param.TermType;
 import org.hswebframework.web.api.crud.entity.PagerResult;
 import org.hswebframework.web.api.crud.entity.QueryParamEntity;
-import org.hswebframework.web.authorization.annotation.DeleteAction;
+import org.hswebframework.web.authorization.DefaultDimensionType;
 import org.hswebframework.web.authorization.annotation.QueryAction;
 import org.hswebframework.web.authorization.annotation.Resource;
 import org.hswebframework.web.authorization.annotation.SaveAction;
 import org.hswebframework.web.crud.web.reactive.ReactiveServiceCrudController;
+import org.hswebframework.web.system.authorization.api.entity.DimensionUserEntity;
+import org.hswebframework.web.system.authorization.defaults.service.DefaultDimensionUserService;
 import org.jetlinks.community.auth.entity.ApiClientAccessLogEntity;
 import org.jetlinks.community.auth.entity.ApiClientEntity;
+import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.jetlinks.community.auth.service.AppUserService;
 import org.jetlinks.community.auth.service.OrganizationService;
 import org.jetlinks.community.auth.service.RoleService;
 import org.jetlinks.community.auth.web.response.ApiClientKeyResponse;
-import org.springframework.util.StringUtils;
+import org.jetlinks.community.authorize.OrgDimensionType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -62,6 +67,8 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     private final ApiClientTokenService tokenService;
     private final RoleService roleService;
     private final OrganizationService organizationService;
+    private final DefaultDimensionUserService dimensionUserService;
+    private final AppUserService appUserService;
 
     @Override
     public ApiClientService getService() {
@@ -149,6 +156,19 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
             .flatMap(list -> roleService.unbindUser(Collections.singleton(clientId), list));
     }
 
+    @PostMapping("/{clientId}/role/_query")
+    @QueryAction
+    @Operation(summary = "查询已绑定的角色")
+    public Mono<PagerResult<DimensionUserEntity>> queryBoundRoles(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @RequestBody Mono<QueryParamEntity> query) {
+        return query.flatMap(q -> {
+            q.and("userId", TermType.eq, clientId);
+            q.and("dimensionTypeId", TermType.eq, DefaultDimensionType.role.getId());
+            return dimensionUserService.queryPager(q);
+        });
+    }
+
     @PostMapping("/{clientId}/org/_bind")
     @SaveAction
     @Operation(summary = "绑定组织")
@@ -156,8 +176,9 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
                            @RequestBody Mono<BindOrgRequest> request) {
         return request
             .flatMap(req -> organizationService.bindUser(
-                clientId,
-                req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList()))
+                Collections.singleton(clientId),
+                req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList(),
+                false))
             .then();
     }
 
@@ -167,9 +188,77 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     public Mono<Void> unbindOrg(@PathVariable @Parameter(description = "客户端ID") String clientId,
                                 @RequestBody Mono<BindOrgRequest> request) {
         return request
-            .flatMap(req -> organizationService.unbindUser(
-                clientId,
-                req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList()))
+            .flatMap(req -> {
+                List<String> orgIds = req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList();
+                if (orgIds.isEmpty()) {
+                    return Mono.empty();
+                }
+                return dimensionUserService.createDelete()
+                    .where(DimensionUserEntity::getUserId, clientId)
+                    .and(DimensionUserEntity::getDimensionTypeId, OrgDimensionType.org.getId())
+                    .in(DimensionUserEntity::getDimensionId, orgIds)
+                    .execute();
+            })
+            .then();
+    }
+
+    @PostMapping("/{clientId}/org/_query")
+    @QueryAction
+    @Operation(summary = "查询已绑定的组织")
+    public Mono<PagerResult<DimensionUserEntity>> queryBoundOrgs(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @RequestBody Mono<QueryParamEntity> query) {
+        return query.flatMap(q -> {
+            q.and("userId", TermType.eq, clientId);
+            q.and("dimensionTypeId", TermType.eq, OrgDimensionType.org.getId());
+            return dimensionUserService.queryPager(q);
+        });
+    }
+
+    @PostMapping("/{clientId}/user/_query")
+    @QueryAction
+    @Operation(summary = "查询应用下的用户列表")
+    public Mono<PagerResult<AppUserEntity>> queryAppUsers(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @RequestBody Mono<QueryParamEntity> query) {
+        return query.flatMap(q -> appUserService.queryByClientId(clientId, q));
+    }
+
+    @PostMapping("/{clientId}/user/_create")
+    @SaveAction
+    @Operation(summary = "在应用下创建用户")
+    public Mono<AppUserEntity> createAppUser(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @RequestBody AppUserEntity entity) {
+        entity.setClientId(clientId);
+        return appUserService.register(entity);
+    }
+
+    @PostMapping("/{clientId}/user/{userId}/_disable")
+    @SaveAction
+    @Operation(summary = "禁用应用下的用户")
+    public Mono<Void> disableAppUser(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @PathVariable @Parameter(description = "用户ID") String userId) {
+        return appUserService.createUpdate()
+            .set(AppUserEntity::getStatus, (byte) 0)
+            .where(AppUserEntity::getId, userId)
+            .and(AppUserEntity::getClientId, clientId)
+            .execute()
+            .then();
+    }
+
+    @PostMapping("/{clientId}/user/{userId}/_enable")
+    @SaveAction
+    @Operation(summary = "启用应用下的用户")
+    public Mono<Void> enableAppUser(
+        @PathVariable @Parameter(description = "客户端ID") String clientId,
+        @PathVariable @Parameter(description = "用户ID") String userId) {
+        return appUserService.createUpdate()
+            .set(AppUserEntity::getStatus, (byte) 1)
+            .where(AppUserEntity::getId, userId)
+            .and(AppUserEntity::getClientId, clientId)
+            .execute()
             .then();
     }
 

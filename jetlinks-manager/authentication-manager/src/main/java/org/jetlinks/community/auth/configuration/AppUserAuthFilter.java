@@ -21,6 +21,8 @@ import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.authorization.simple.SimpleAuthentication;
 import org.hswebframework.web.authorization.simple.SimpleUser;
 import org.jetlinks.community.auth.entity.AppUserEntity;
+import org.jetlinks.community.auth.enums.ApiClientState;
+import org.jetlinks.community.auth.service.ApiClientService;
 import org.jetlinks.community.auth.service.AppUserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -51,10 +53,14 @@ public class AppUserAuthFilter implements WebFilter {
 
     private final AppUserService appUserService;
     private final UserTokenManager userTokenManager;
+    private final ApiClientService apiClientService;
 
-    public AppUserAuthFilter(AppUserService appUserService, UserTokenManager userTokenManager) {
+    public AppUserAuthFilter(AppUserService appUserService,
+                             UserTokenManager userTokenManager,
+                             ApiClientService apiClientService) {
         this.appUserService = appUserService;
         this.userTokenManager = userTokenManager;
+        this.apiClientService = apiClientService;
     }
 
     @Override
@@ -85,13 +91,21 @@ public class AppUserAuthFilter implements WebFilter {
                         if (appUser.getStatus() == null || appUser.getStatus() == 0) {
                             return writeError(exchange, HttpStatus.FORBIDDEN, "error.app_user_disabled");
                         }
-                        Authentication auth = buildAuthentication(appUser);
-                        return chain
-                            .filter(exchange)
-                            .contextWrite(ctx -> ctx
-                                .put(Authentication.class, auth)
-                                .put(AppUserEntity.class, appUser)
-                                .put("app-user-token", token));
+                        return apiClientService.getByClientId(appUser.getClientId())
+                            .flatMap(client -> {
+                                if (client.getState() != ApiClientState.enabled) {
+                                    return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
+                                }
+                                Authentication auth = buildAuthentication(appUser);
+                                return chain
+                                    .filter(exchange)
+                                    .contextWrite(ctx -> ctx
+                                        .put(Authentication.class, auth)
+                                        .put(AppUserEntity.class, appUser)
+                                        .put("app-user-token", token));
+                            })
+                            .switchIfEmpty(Mono.defer(() ->
+                                writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_not_found")));
                     })
                     .switchIfEmpty(Mono.defer(() ->
                         writeError(exchange, HttpStatus.UNAUTHORIZED, "error.app_user_not_found")));

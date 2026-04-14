@@ -46,9 +46,9 @@ public class ApiClientService extends GenericReactiveCrudService<ApiClientEntity
     private final ReactiveRedisOperations<Object, Object> redis;
 
     public Mono<ApiClientEntity> createClient(ApiClientEntity entity) {
-        if (!org.springframework.util.StringUtils.hasText(entity.getSecretId())) {
+        if (!org.springframework.util.StringUtils.hasText(entity.getAppId())) {
             String raw = IDGenerator.MD5.generate().toUpperCase().replaceAll("[^A-Z0-9]", "");
-            entity.setSecretId("AK-" + (raw.length() >= 16 ? raw.substring(0, 16) : raw));
+            entity.setAppId("AK-" + (raw.length() >= 16 ? raw.substring(0, 16) : raw));
         }
         return this.insert(Mono.just(entity)).thenReturn(entity);
     }
@@ -70,20 +70,20 @@ public class ApiClientService extends GenericReactiveCrudService<ApiClientEntity
     }
 
     /**
-     * 根据 SecretId（AccessKey）查询客户端，结果缓存 Redis 5 分钟
+     * 根据 AppId（AccessKey）查询客户端，结果缓存 Redis 5 分钟
      *
-     * @param secretId AccessKey
+     * @param appId AppId
      * @return 客户端实体
      */
-    public Mono<ApiClientEntity> getBySecretId(String secretId) {
-        String cacheKey = CACHE_KEY_PREFIX + "sid:" + secretId;
+    public Mono<ApiClientEntity> getByAppId(String appId) {
+        String cacheKey = CACHE_KEY_PREFIX + "aid:" + appId;
         return redis
             .opsForValue()
             .get(cacheKey)
             .cast(ApiClientEntity.class)
             .switchIfEmpty(Mono.defer(() -> this
                 .createQuery()
-                .where(ApiClientEntity::getSecretId, secretId)
+                .where(ApiClientEntity::getAppId, appId)
                 .fetchOne()
                 .flatMap(entity -> redis
                     .opsForValue()
@@ -145,7 +145,7 @@ public class ApiClientService extends GenericReactiveCrudService<ApiClientEntity
             .findById(clientId)
             .flatMap(entity -> {
                 String byId = CACHE_KEY_PREFIX + clientId;
-                String bySid = CACHE_KEY_PREFIX + "sid:" + entity.getSecretId();
+                String bySid = CACHE_KEY_PREFIX + "aid:" + entity.getAppId();
                 return redis.delete(byId, bySid).then();
             })
             .switchIfEmpty(redis.delete(CACHE_KEY_PREFIX + clientId).then());

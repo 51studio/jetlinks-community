@@ -48,7 +48,7 @@ import java.util.List;
 @Getter
 @Setter
 @Table(name = "s_api_client", indexes = {
-    @Index(name = "idx_api_client_secret_id", columnList = "secret_id", unique = true)
+    @Index(name = "idx_api_client_app_id", columnList = "app_id", unique = true)
 })
 @Comment("API客户端信息表")
 @EnableEntityEvent
@@ -60,9 +60,9 @@ public class ApiClientEntity extends GenericEntity<String> implements RecordCrea
     @Length(max = 128)
     private String name;
 
-    @Schema(description = "AccessKey（客户端标识）", accessMode = Schema.AccessMode.READ_ONLY)
-    @Column(name = "secret_id", nullable = false, length = 128, updatable = false)
-    private String secretId;
+    @Schema(description = "AppId（应用标识）", accessMode = Schema.AccessMode.READ_ONLY)
+    @Column(name = "app_id", nullable = false, length = 128, updatable = false)
+    private String appId;
 
     @Schema(description = "SecretKey（AES加密存储，仅创建或重置时返回明文）", accessMode = Schema.AccessMode.READ_ONLY)
     @Column(name = "secret_key", length = 256)

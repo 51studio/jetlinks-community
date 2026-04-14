@@ -67,7 +67,7 @@ public class AppUserController {
     @Operation(summary = "第三方用户登录，返回 token 和 userId")
     public Mono<LoginResponse> login(@RequestBody LoginRequest request) {
         return appUserService
-            .login(request.getUsername(), request.getPassword())
+            .login(request.getClientId(), request.getUsername(), request.getPassword())
             .map(userToken -> new LoginResponse(userToken.getToken(), userToken.getUserId()));
     }
 
@@ -146,18 +146,16 @@ public class AppUserController {
     }
 
     /**
-     * 获取 第三方应用 Token
+     * 获取所属第三方应用的 Token
      * 如果原 Token 已失效，自动生成新的 Token 并返回
      */
-    @GetMapping("/api-client/{secretId}/token")
-    @Operation(summary = "获取 第三方应用 Token", description = "通过 secretId 获取 第三方应用 Token，如果原 Token 已失效则自动生成新的 Token")
-    public Mono<ApiClientTokenResponse> getApiClientToken(
-        @PathVariable @Parameter(description = "API 客户端 accessKey") String secretId) {
-
+    @GetMapping("/api-client/token")
+    @Operation(summary = "获取所属第三方应用的 Token", description = "获取当前用户所属第三方应用的 Token，如果原 Token 已失效则自动生成新的")
+    public Mono<ApiClientTokenResponse> getApiClientToken() {
         return currentAppUser()
             .flatMap(currentUser ->
                 apiClientService
-                    .getBySecretId(secretId)
+                    .getByClientId(currentUser.getClientId())
                     .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "API client not found")))
                     .flatMap(client -> {
                         if (client.getState() != org.jetlinks.community.auth.enums.ApiClientState.enabled) {
@@ -198,6 +196,7 @@ public class AppUserController {
     @Getter
     @Setter
     public static class LoginRequest {
+        private String clientId;
         private String username;
         private String password;
     }

@@ -16,12 +16,17 @@
 package org.jetlinks.community.auth.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.hswebframework.ezorm.core.param.TermType;
+import org.hswebframework.web.api.crud.entity.PagerResult;
+import org.hswebframework.web.api.crud.entity.QueryParamEntity;
 import org.hswebframework.web.authorization.token.UserToken;
 import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.crud.service.GenericReactiveCrudService;
 import org.hswebframework.web.exception.BusinessException;
 import org.hswebframework.web.id.IDGenerator;
 import org.jetlinks.community.auth.entity.AppUserEntity;
+import org.jetlinks.community.auth.enums.ApiClientState;
+import org.jetlinks.community.auth.service.ApiClientService;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
 import org.springframework.http.HttpStatus;
@@ -54,11 +59,14 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
 
     private final ReactiveRedisOperations<Object, Object> redis;
     private final UserTokenManager userTokenManager;
+    private final ApiClientService apiClientService;
 
     public AppUserService(ReactiveRedisOperations<Object, Object> redis,
-                          UserTokenManager userTokenManager) {
+                          UserTokenManager userTokenManager,
+                          ApiClientService apiClientService) {
         this.redis = redis;
         this.userTokenManager = userTokenManager;
+        this.apiClientService = apiClientService;
     }
 
     // -----------------------------------------------------------------------
@@ -73,23 +81,35 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
      * @return 保存后的实体（password 字段已清空）
      */
     public Mono<AppUserEntity> register(AppUserEntity entity) {
-        return this
-            .createQuery()
-            .where(AppUserEntity::getUsername, entity.getUsername())
-            .count()
-            .flatMap(count -> {
-                if (count > 0) {
-                    return Mono.error(new BusinessException("error.app_user_username_exists", 400));
-                }
-                // SHA-256 + salt 加密
-                entity.setPassword(encodePassword(entity.getPassword()));
-                if (entity.getStatus() == null) {
-                    entity.setStatus((byte) 1);
+        if (entity.getClientId() == null || entity.getClientId().isBlank()) {
+            return Mono.error(new BusinessException("error.api_client_id_required", 400));
+        }
+        return apiClientService
+            .getByClientId(entity.getClientId())
+            .switchIfEmpty(Mono.error(new BusinessException("error.api_client_not_found", 404)))
+            .flatMap(client -> {
+                if (client.getState() != ApiClientState.enabled) {
+                    return Mono.error(new BusinessException("error.api_client_disabled", 403));
                 }
                 return this
-                    .insert(Mono.just(entity))
-                    .thenReturn(entity)
-                    .doOnNext(saved -> saved.setPassword(null));
+                    .createQuery()
+                    .where(AppUserEntity::getClientId, entity.getClientId())
+                    .and(AppUserEntity::getUsername, entity.getUsername())
+                    .count()
+                    .flatMap(count -> {
+                        if (count > 0) {
+                            return Mono.error(new BusinessException("error.app_user_username_exists", 400));
+                        }
+                        // SHA-256 + salt 加密
+                        entity.setPassword(encodePassword(entity.getPassword()));
+                        if (entity.getStatus() == null) {
+                            entity.setStatus((byte) 1);
+                        }
+                        return this
+                            .insert(Mono.just(entity))
+                            .thenReturn(entity)
+                            .doOnNext(saved -> saved.setPassword(null));
+                    });
             });
     }
 
@@ -98,14 +118,15 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     // -----------------------------------------------------------------------
 
     /**
-     * 用户名 + 密码登录，成功后颁发 Bearer Token
+     * 用户名 + 密码登录，成功后颌发 Bearer Token
      *
+     * @param clientId 客户端 ID
      * @param username 用户名
      * @param password 明文密码
      * @return UserToken（含 token 字符串）
      */
-    public Mono<UserToken> login(String username, String password) {
-        return getByUsername(username)
+    public Mono<UserToken> login(String clientId, String username, String password) {
+        return getByUsername(clientId, username)
             .switchIfEmpty(Mono.error(new BusinessException("error.app_user_not_found", HttpStatus.NOT_FOUND.value())))
             .flatMap(user -> {
                 if (user.getStatus() == null || user.getStatus() == 0) {
@@ -162,23 +183,32 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     // -----------------------------------------------------------------------
 
     /**
-     * 根据用户名查询（Redis 缓存 10min）
+     * 根据 clientId + 用户名查询（Redis 缓存 10min）
      */
-    public Mono<AppUserEntity> getByUsername(String username) {
-        String key = CACHE_PREFIX_BY_NAME + username;
+    public Mono<AppUserEntity> getByUsername(String clientId, String username) {
+        String key = CACHE_PREFIX_BY_NAME + clientId + ":" + username;
         return redis
             .opsForValue()
             .get(key)
             .cast(AppUserEntity.class)
             .switchIfEmpty(Mono.defer(() -> this
                 .createQuery()
-                .where(AppUserEntity::getUsername, username)
+                .where(AppUserEntity::getClientId, clientId)
+                .and(AppUserEntity::getUsername, username)
                 .fetchOne()
                 .flatMap(entity -> redis
                     .opsForValue()
                     .set(key, entity, CACHE_TTL)
                     .thenReturn(entity))
             ));
+    }
+
+    /**
+     * 按 clientId 分页查询 AppUser
+     */
+    public Mono<PagerResult<AppUserEntity>> queryByClientId(String clientId, QueryParamEntity query) {
+        query.and("clientId", TermType.eq, clientId);
+        return queryPager(query);
     }
 
     /**
@@ -233,12 +263,21 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     }
 
     /**
-     * 清除 Redis 缓存
+     * 清除 Redis 缓存（通过 userId 自动查找 clientId）
      */
     public Mono<Void> evictCache(String userId, String username) {
+        return findById(userId)
+            .flatMap(user -> evictCache(userId, user.getClientId(), username))
+            .switchIfEmpty(redis.delete(CACHE_PREFIX_BY_ID + userId).then());
+    }
+
+    /**
+     * 清除 Redis 缓存
+     */
+    public Mono<Void> evictCache(String userId, String clientId, String username) {
         return redis.delete(
             CACHE_PREFIX_BY_ID + userId,
-            CACHE_PREFIX_BY_NAME + username
+            CACHE_PREFIX_BY_NAME + clientId + ":" + username
         ).then();
     }
 
