@@ -25,9 +25,11 @@ import org.hswebframework.web.api.crud.entity.QueryParamEntity;
 import org.hswebframework.web.api.crud.entity.PagerResult;
 import org.jetlinks.community.PropertyMetric;
 import org.jetlinks.community.device.entity.DeviceInstanceEntity;
+import org.jetlinks.community.device.entity.DeviceProductEntity;
 import org.jetlinks.community.device.entity.DeviceProperty;
 import org.jetlinks.core.device.DeviceThingType;
 import org.jetlinks.community.device.service.LocalDeviceInstanceService;
+import org.jetlinks.community.device.service.LocalDeviceProductService;
 import org.jetlinks.community.device.service.data.DeviceDataService;
 import org.jetlinks.community.things.impl.metric.DefaultPropertyMetricManager;
 import org.jetlinks.community.timeseries.query.AggregationData;
@@ -56,6 +58,7 @@ import java.util.Map;
 public class ApiClientDeviceController {
 
     private final LocalDeviceInstanceService deviceInstanceService;
+    private final LocalDeviceProductService deviceProductService;
     private final DeviceDataService deviceDataService;
     private final DefaultPropertyMetricManager metricManager;
     private final org.jetlinks.community.auth.service.ApiClientTokenService apiClientTokenService;
@@ -91,6 +94,39 @@ public class ApiClientDeviceController {
         return validateToken(authorization)
             .flatMap(clientId -> deviceInstanceService.findById(deviceId)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Device not found"))));
+    }
+
+    /**
+     * 根据产品ID获取产品信息
+     */
+    @GetMapping("/product/{productId}")
+    @Operation(summary = "获取产品信息", description = "通过API客户端Token获取指定产品的详细信息")
+    public Mono<DeviceProductEntity> getProductInfo(
+        @RequestHeader("Authorization") @Parameter(description = "Bearer Token") String authorization,
+        @PathVariable @Parameter(description = "产品ID") String productId) {
+
+        return validateToken(authorization)
+            .flatMap(clientId -> deviceProductService.findById(productId)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"))));
+    }
+
+    @GetMapping("/product/{productId}/access-config")
+    @Operation(summary = "获取产品接入配置", description = "获取产品的接入配置信息，包含MQTT认证配置等")
+    public Mono<Map<String, Object>> getProductAccessConfig(
+        @RequestHeader("Authorization") @Parameter(description = "Bearer Token") String authorization,
+        @PathVariable @Parameter(description = "产品ID") String productId) {
+
+        return validateToken(authorization)
+            .flatMap(clientId -> deviceProductService.findById(productId)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found")))
+                .map(product -> {
+                    Map<String, Object> config = new java.util.HashMap<>();
+                    config.put("accessId", product.getAccessId());
+                    config.put("accessProvider", product.getAccessProvider());
+                    config.put("accessName", product.getAccessName());
+                    config.put("configuration", product.getConfiguration());
+                    return config;
+                }));
     }
 
     /**
