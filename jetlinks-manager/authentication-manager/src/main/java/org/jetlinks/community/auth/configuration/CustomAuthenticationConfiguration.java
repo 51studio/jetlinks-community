@@ -18,12 +18,11 @@ package org.jetlinks.community.auth.configuration;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.hswebframework.web.authorization.Authentication;
 import org.hswebframework.web.authorization.ReactiveAuthenticationHolder;
+import org.hswebframework.web.authorization.ReactiveAuthenticationManager;
 import org.hswebframework.web.authorization.ReactiveAuthenticationSupplier;
 import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.authorization.token.redis.RedisUserTokenManager;
 import org.hswebframework.web.authorization.token.redis.SimpleUserToken;
-import org.jetlinks.community.auth.configuration.ApiClientAuthFilter;
-import org.jetlinks.community.auth.configuration.AppUserAuthFilter;
 import org.jetlinks.community.auth.dimension.UserAuthenticationEventPublisher;
 import org.jetlinks.community.auth.enums.UserEntityType;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
@@ -94,7 +93,7 @@ public class CustomAuthenticationConfiguration {
     }
 
     /**
-     * 注册 C 端用户认证过滤器
+     * 注册 第三方用户认证过滤器
      */
     @Bean
     @Order(AppUserAuthFilter.ORDER)
@@ -111,8 +110,9 @@ public class CustomAuthenticationConfiguration {
     public ApiClientAuthFilter apiClientAuthFilter(ApiClientService apiClientService,
                                                    ApiClientTokenService apiClientTokenService,
                                                    ApiClientRateLimiter apiClientRateLimiter,
-                                                   ApiClientAccessLogService accessLogService) {
-        return new ApiClientAuthFilter(apiClientService, apiClientTokenService, apiClientRateLimiter, accessLogService);
+                                                   ApiClientAccessLogService accessLogService,
+                                                   ReactiveAuthenticationManager reactiveAuthenticationManager) {
+        return new ApiClientAuthFilter(apiClientService, apiClientTokenService, apiClientRateLimiter, accessLogService, reactiveAuthenticationManager);
     }
 
     /**

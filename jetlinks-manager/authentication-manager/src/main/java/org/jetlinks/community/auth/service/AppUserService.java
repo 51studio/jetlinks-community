@@ -32,7 +32,7 @@ import java.time.Duration;
 import java.util.UUID;
 
 /**
- * C 端用户业务服务
+ * 第三方用户业务服务
  *
  * @author jetlinks
  * @since 2.3
@@ -66,7 +66,7 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     // -----------------------------------------------------------------------
 
     /**
-     * 注册新 C 端用户
+     * 注册新 第三方用户
      * <p>密码 BCrypt 加密后存库；username 唯一性在数据库索引层保障，此处提前校验并返回友好提示。</p>
      *
      * @param entity 用户信息（password 为明文）

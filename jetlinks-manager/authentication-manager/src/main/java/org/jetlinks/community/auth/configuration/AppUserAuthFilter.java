@@ -32,7 +32,7 @@ import reactor.core.publisher.Mono;
 import java.util.Collections;
 
 /**
- * C 端用户认证过滤器
+ * 第三方用户认证过滤器
  * <p>
  * 从请求头 {@code Authorization: Bearer {token}} 中提取 Token，
  * 验证有效后构造 {@link Authentication} 和 {@link AppUserEntity} 注入 ReactorContext。

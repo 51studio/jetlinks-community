@@ -35,7 +35,7 @@ import javax.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * C 端用户实体（独立账号体系）
+ * 第三方用户实体（独立账号体系）
  *
  * @author jetlinks
  * @since 2.3

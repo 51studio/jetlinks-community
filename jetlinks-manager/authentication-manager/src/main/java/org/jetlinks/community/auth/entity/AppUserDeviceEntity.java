@@ -35,7 +35,7 @@ import javax.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * C 端用户-设备关联表
+ * 第三方用户-设备关联表
  *
  * @author jetlinks
  * @since 2.3
@@ -57,7 +57,7 @@ public class AppUserDeviceEntity extends GenericEntity<String> {
         return super.getId();
     }
 
-    @Schema(description = "C 端用户 ID")
+    @Schema(description = "第三方用户 ID")
     @Column(name = "user_id", nullable = false, length = 64, updatable = false)
     @NotBlank(message = "用户ID不能为空", groups = CreateGroup.class)
     private String userId;

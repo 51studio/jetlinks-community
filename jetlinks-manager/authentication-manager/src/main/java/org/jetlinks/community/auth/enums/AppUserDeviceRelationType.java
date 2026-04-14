@@ -20,7 +20,7 @@ import lombok.Getter;
 import org.hswebframework.web.dict.EnumDict;
 
 /**
- * C 端用户与设备的关联类型
+ * 第三方用户与设备的关联类型
  *
  * <ul>
  *   <li>{@link #manage}  — 管理：设备的所有者/主管理人，operatorId 为空（由系统自动设置）</li>

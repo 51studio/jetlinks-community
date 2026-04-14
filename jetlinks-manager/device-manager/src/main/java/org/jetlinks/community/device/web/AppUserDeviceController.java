@@ -35,8 +35,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * C 端用户设备绑定 REST 接口
- * <p>所有端点均需 C 端用户登录（由 {@code AppUserAuthFilter} 拦截并注入 {@link AppUserEntity}）。</p>
+ * 第三方用户设备绑定 REST 接口
+ * <p>所有端点均需 第三方用户登录（由 {@code AppUserAuthFilter} 拦截并注入 {@link AppUserEntity}）。</p>
  *
  * @author jetlinks
  * @since 2.3
@@ -58,7 +58,7 @@ public class AppUserDeviceController {
      * 查询当前用户绑定的所有设备（包含设备状态）
      */
     @GetMapping
-    @Operation(summary = "查询当前 C 端用户绑定的设备列表")
+    @Operation(summary = "查询当前 第三方用户绑定的设备列表")
     public Flux<DeviceBindingInfo> listDevices() {
         return currentAppUser()
             .flatMapMany(user -> deviceService.getByUserId(user.getId())
@@ -94,7 +94,7 @@ public class AppUserDeviceController {
      * 绑定设备
      */
     @PostMapping("/bind")
-    @Operation(summary = "绑定设备到当前 C 端用户")
+    @Operation(summary = "绑定设备到当前 第三方用户")
     public Mono<AppUserDeviceEntity> bindDevice(@RequestBody BindDeviceRequest request) {
         return currentAppUser()
             .flatMap(user -> {
@@ -149,7 +149,7 @@ public class AppUserDeviceController {
     // -----------------------------------------------------------------------
 
     /**
-     * 从 ReactorContext 获取当前 C 端用户，不存在则返回 401
+     * 从 ReactorContext 获取当前 第三方用户，不存在则返回 401
      */
     private Mono<AppUserEntity> currentAppUser() {
         return Mono.deferContextual(ctx ->

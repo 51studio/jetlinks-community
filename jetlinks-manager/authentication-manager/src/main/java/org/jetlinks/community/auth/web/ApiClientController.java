@@ -31,10 +31,18 @@ import org.jetlinks.community.auth.entity.ApiClientEntity;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.jetlinks.community.auth.service.OrganizationService;
+import org.jetlinks.community.auth.service.RoleService;
 import org.jetlinks.community.auth.web.response.ApiClientKeyResponse;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+
+import java.util.Collections;
+import java.util.List;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * API 客户端（第三方系统对接）管理接口
@@ -45,13 +53,15 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/open-api/client")
 @AllArgsConstructor
-@Resource(id = "open-api", name = "第三方系统（API客户端）", group = "system")
+@Resource(id = "open-api", name = "应用管理", group = "system")
 @Tag(name = "第三方系统对接（API客户端）")
 public class ApiClientController implements ReactiveServiceCrudController<ApiClientEntity, String> {
 
     private final ApiClientService apiClientService;
     private final ApiClientAccessLogService accessLogService;
     private final ApiClientTokenService tokenService;
+    private final RoleService roleService;
+    private final OrganizationService organizationService;
 
     @Override
     public ApiClientService getService() {
@@ -119,6 +129,54 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
         @PathVariable @Parameter(description = "客户端ID") String id,
         @RequestBody Mono<QueryParamEntity> query) {
         return query.flatMap(q -> accessLogService.queryByClientId(id, q));
+    }
+
+    @PostMapping("/{clientId}/role/_bind")
+    @SaveAction
+    @Operation(summary = "绑定角色")
+    public Mono<Void> bindRole(@PathVariable @Parameter(description = "客户端ID") String clientId,
+                           @RequestBody Mono<List<String>> roleIdList) {
+        return roleIdList
+            .flatMap(list -> roleService.bindUser(Collections.singleton(clientId), list, false));
+    }
+
+    @PostMapping("/{clientId}/role/_unbind")
+    @SaveAction
+    @Operation(summary = "解绑角色")
+    public Mono<Void> unbindRole(@PathVariable @Parameter(description = "客户端ID") String clientId,
+                                @RequestBody Mono<List<String>> roleIdList) {
+        return roleIdList
+            .flatMap(list -> roleService.unbindUser(Collections.singleton(clientId), list));
+    }
+
+    @PostMapping("/{clientId}/org/_bind")
+    @SaveAction
+    @Operation(summary = "绑定组织")
+    public Mono<Void> bindOrg(@PathVariable @Parameter(description = "客户端ID") String clientId,
+                           @RequestBody Mono<BindOrgRequest> request) {
+        return request
+            .flatMap(req -> organizationService.bindUser(
+                clientId,
+                req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList()))
+            .then();
+    }
+
+    @PostMapping("/{clientId}/org/_unbind")
+    @SaveAction
+    @Operation(summary = "解绑组织")
+    public Mono<Void> unbindOrg(@PathVariable @Parameter(description = "客户端ID") String clientId,
+                                @RequestBody Mono<BindOrgRequest> request) {
+        return request
+            .flatMap(req -> organizationService.unbindUser(
+                clientId,
+                req.getOrgIds() != null ? req.getOrgIds() : Collections.emptyList()))
+            .then();
+    }
+
+    @Getter
+    @Setter
+    public static class BindOrgRequest {
+        private List<String> orgIds;
     }
 
 }

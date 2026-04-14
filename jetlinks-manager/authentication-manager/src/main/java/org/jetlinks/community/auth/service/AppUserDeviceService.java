@@ -27,7 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * C 端用户设备绑定服务
+ * 第三方用户设备绑定服务
  *
  * @author jetlinks
  * @since 2.3
@@ -61,7 +61,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
         if (entity.getRelationType() == null) {
             entity.setRelationType(AppUserDeviceRelationType.bind);
         }
-        
+
         // 检查该设备是否已有绑定关系
         return this
             .createQuery()
@@ -76,7 +76,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
                         .insert(Mono.just(entity))
                         .thenReturn(entity);
                 }
-                
+
                 // 检查是否已经绑定过
                 return this
                     .createQuery()
@@ -102,7 +102,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
      *   <li>需要先通过 {@link #transferManage(String, String, String)} 转移管理权限</li>
      * </ul>
      *
-     * @param userId   C 端用户 ID
+     * @param userId   第三方用户 ID
      * @param deviceId 设备 ID
      */
     public Mono<Void> unbindDevice(String userId, String deviceId) {
@@ -111,7 +111,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
                 // 管理者不能直接解绑
                 if (binding.getRelationType() == AppUserDeviceRelationType.manage) {
                     return Mono.error(new BusinessException(
-                        "error.app_user_device_manage_cannot_unbind", 
+                        "error.app_user_device_manage_cannot_unbind",
                         403,
                         "管理者不能直接解绑，请先转移管理权限"));
                 }
@@ -131,7 +131,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
     /**
      * 查询指定用户绑定的全部设备
      *
-     * @param userId C 端用户 ID
+     * @param userId 第三方用户 ID
      * @return 设备关联列表
      */
     public Flux<AppUserDeviceEntity> getByUserId(String userId) {
@@ -159,7 +159,7 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
     /**
      * 校验设备是否属于该用户，不属于则抛出 403 异常
      *
-     * @param userId   C 端用户 ID
+     * @param userId   第三方用户 ID
      * @param deviceId 设备 ID
      */
     public Mono<AppUserDeviceEntity> assertOwnership(String userId, String deviceId) {
@@ -255,25 +255,25 @@ public class AppUserDeviceService extends GenericReactiveCrudService<AppUserDevi
             .flatMap(currentBinding -> {
                 if (currentBinding.getRelationType() != AppUserDeviceRelationType.manage) {
                     return Mono.error(new BusinessException(
-                        "error.app_user_device_not_manager", 
+                        "error.app_user_device_not_manager",
                         403,
                         "只有管理者才能转移管理权限"));
                 }
-                
+
                 // 验证目标用户是 bind 类型的绑定者
                 return getBinding(newManagerUserId, deviceId)
                     .switchIfEmpty(Mono.error(new BusinessException(
-                        "error.app_user_device_target_not_bound", 
+                        "error.app_user_device_target_not_bound",
                         404,
                         "目标用户未绑定该设备")))
                     .flatMap(targetBinding -> {
                         if (targetBinding.getRelationType() != AppUserDeviceRelationType.bind) {
                             return Mono.error(new BusinessException(
-                                "error.app_user_device_target_not_bind_type", 
+                                "error.app_user_device_target_not_bind_type",
                                 400,
                                 "只能将管理权限转移给 bind 类型的绑定者"));
                         }
-                        
+
                         // 执行权限转移：当前管理者降为 bind，目标用户升级为 manage
                         return this
                             .createUpdate()

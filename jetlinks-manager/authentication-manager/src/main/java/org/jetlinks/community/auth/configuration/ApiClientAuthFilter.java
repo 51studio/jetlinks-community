@@ -17,6 +17,7 @@ package org.jetlinks.community.auth.configuration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.hswebframework.web.authorization.Authentication;
+import org.hswebframework.web.authorization.ReactiveAuthenticationManager;
 import org.hswebframework.web.authorization.simple.SimpleAuthentication;
 import org.hswebframework.web.authorization.simple.SimplePermission;
 import org.hswebframework.web.authorization.simple.SimpleUser;
@@ -75,15 +76,18 @@ public class ApiClientAuthFilter implements WebFilter {
     private final ApiClientTokenService apiClientTokenService;
     private final ApiClientRateLimiter rateLimiter;
     private final ApiClientAccessLogService accessLogService;
+    private final ReactiveAuthenticationManager authenticationManager;
 
     public ApiClientAuthFilter(ApiClientService apiClientService,
-                                ApiClientTokenService apiClientTokenService,
-                                ApiClientRateLimiter rateLimiter,
-                                ApiClientAccessLogService accessLogService) {
+                                 ApiClientTokenService apiClientTokenService,
+                                 ApiClientRateLimiter rateLimiter,
+                                 ApiClientAccessLogService accessLogService,
+                                 ReactiveAuthenticationManager authenticationManager) {
         this.apiClientService = apiClientService;
         this.apiClientTokenService = apiClientTokenService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
+        this.authenticationManager = authenticationManager;
     }
 
     @Override
@@ -156,8 +160,6 @@ public class ApiClientAuthFilter implements WebFilter {
             .switchIfEmpty(writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid"));
     }
 
-    // ----------------------------- 通用认证 -----------------------------
-
     private Mono<Void> authenticate(ApiClientEntity client,
                                     ServerWebExchange exchange,
                                     WebFilterChain chain) {
@@ -165,7 +167,6 @@ public class ApiClientAuthFilter implements WebFilter {
             return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
         }
 
-        // IP 白名单校验
         if (StringUtils.hasText(client.getIpWhiteList())) {
             String remoteIp = getClientIp(exchange.getRequest());
             boolean allowed = false;
@@ -180,34 +181,49 @@ public class ApiClientAuthFilter implements WebFilter {
             }
         }
 
-        // 频率限制
         int rateLimit = client.getRateLimit() == null ? 0 : client.getRateLimit();
-        Authentication auth = buildAuthentication(client);
         String ip = getClientIp(exchange.getRequest());
         String path = exchange.getRequest().getPath().value();
         String method = exchange.getRequest().getMethod().name();
 
-        return rateLimiter
-            .checkAndIncrement(client.getId(), rateLimit)
-            .then(chain
-                .filter(exchange)
-                .contextWrite(ctx -> ctx.put(Authentication.class, auth))
-                .doFinally(signal -> {
-                    // 异步记录访问日志
-                    int status = exchange.getResponse().getStatusCode() != null
-                        ? exchange.getResponse().getStatusCode().value() : 200;
-                    accessLogService.asyncRecord(
-                        client.getId(), client.getName(), path, method, ip, status);
-                }))
-            .onErrorResume(e -> {
-                if (e instanceof org.hswebframework.web.exception.BusinessException) {
-                    String code = e.getMessage();
-                    if ("error.api_client_rate_limit_exceeded".equals(code)) {
-                        return writeError(exchange, HttpStatus.TOO_MANY_REQUESTS, code);
-                    }
+        Mono<Authentication> authMono;
+        authMono = authenticationManager
+            .getByUserId(client.getId())
+            .map(auth -> {
+                SimpleUser user = new SimpleUser();
+                user.setId(client.getId());
+                user.setName(client.getName());
+                user.setUsername(client.getSecretId());
+                user.setUserType("api-client");
+                if (auth instanceof SimpleAuthentication) {
+                    ((SimpleAuthentication) auth).setUser(user);
                 }
-                return Mono.error(e);
-            });
+                return auth;
+            })
+            .switchIfEmpty(Mono.fromSupplier(() -> buildAuthentication(client)));
+
+        return authMono.flatMap(auth ->
+            rateLimiter
+                .checkAndIncrement(client.getId(), rateLimit)
+                .then(chain
+                    .filter(exchange)
+                    .contextWrite(ctx -> ctx.put(Authentication.class, auth))
+                    .doFinally(signal -> {
+                        int status = exchange.getResponse().getStatusCode() != null
+                            ? exchange.getResponse().getStatusCode().value() : 200;
+                        accessLogService.asyncRecord(
+                            client.getId(), client.getName(), path, method, ip, status);
+                    }))
+                .onErrorResume(e -> {
+                    if (e instanceof org.hswebframework.web.exception.BusinessException) {
+                        String code = e.getMessage();
+                        if ("error.api_client_rate_limit_exceeded".equals(code)) {
+                            return writeError(exchange, HttpStatus.TOO_MANY_REQUESTS, code);
+                        }
+                    }
+                    return Mono.error(e);
+                })
+        );
     }
 
     /**

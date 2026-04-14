@@ -38,7 +38,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * C 端用户管理后台接口（管理员专用）
+ * 第三方用户管理后台接口（管理员专用）
  * <p>需要后台管理员权限（{@code app-user} 资源）。</p>
  *
  * @author jetlinks
@@ -64,7 +64,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
     // -----------------------------------------------------------------------
 
     /**
-     * 启用 C 端用户
+     * 启用 第三方用户
      */
     @PostMapping("/{id}/_enable")
     @SaveAction
@@ -80,7 +80,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
     }
 
     /**
-     * 禁用 C 端用户
+     * 禁用 第三方用户
      */
     @PostMapping("/{id}/_disable")
     @SaveAction
@@ -100,7 +100,7 @@ public class AppUserAdminController implements ReactiveServiceCrudController<App
     // -----------------------------------------------------------------------
 
     /**
-     * 管理员重置 C 端用户密码
+     * 管理员重置 第三方用户密码
      */
     @PostMapping("/{id}/password/_reset")
     @SaveAction

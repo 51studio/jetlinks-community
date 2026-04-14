@@ -31,7 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 /**
- * C 端用户 REST 接口
+ * 第三方用户 REST 接口
  * <p>注意：登录、注册接口公开，不需要认证；其他接口通过 {@code AppUserAuthFilter} 保护。</p>
  *
  * @author jetlinks
@@ -95,7 +95,7 @@ public class AppUserController {
      * 获取当前用户信息
      */
     @GetMapping("/me")
-    @Operation(summary = "获取当前 C 端用户信息")
+    @Operation(summary = "获取当前 第三方用户信息")
     public Mono<AppUserEntity> me() {
         return currentAppUser()
             .doOnNext(u -> u.setPassword(null));
@@ -105,7 +105,7 @@ public class AppUserController {
      * 更新当前用户基本信息（昵称/头像/邮箱/手机号）
      */
     @PutMapping("/me")
-    @Operation(summary = "更新当前 C 端用户基本信息")
+    @Operation(summary = "更新当前 第三方用户基本信息")
     public Mono<Void> updateMe(@RequestBody UpdateProfileRequest request) {
         return currentAppUser()
             .flatMap(currentUser -> {
@@ -133,7 +133,7 @@ public class AppUserController {
      * 修改密码
      */
     @PutMapping("/me/password")
-    @Operation(summary = "修改 C 端用户密码")
+    @Operation(summary = "修改 第三方用户密码")
     public Mono<Void> updatePassword(@RequestBody ChangePasswordRequest request) {
         return currentAppUser()
             .flatMap(currentUser ->
@@ -146,11 +146,11 @@ public class AppUserController {
     }
 
     /**
-     * 获取 API Client Token
+     * 获取 第三方应用 Token
      * 如果原 Token 已失效，自动生成新的 Token 并返回
      */
     @GetMapping("/api-client/{secretId}/token")
-    @Operation(summary = "获取 API Client Token", description = "通过 secretId 获取 API Client Token，如果原 Token 已失效则自动生成新的 Token")
+    @Operation(summary = "获取 第三方应用 Token", description = "通过 secretId 获取 第三方应用 Token，如果原 Token 已失效则自动生成新的 Token")
     public Mono<ApiClientTokenResponse> getApiClientToken(
         @PathVariable @Parameter(description = "API 客户端 accessKey") String secretId) {
 
@@ -180,7 +180,7 @@ public class AppUserController {
     // -----------------------------------------------------------------------
 
     /**
-     * 从 ReactorContext 中获取当前 C 端用户，不存在则返回 401
+     * 从 ReactorContext 中获取当前 第三方用户，不存在则返回 401
      */
     private Mono<AppUserEntity> currentAppUser() {
         return Mono.deferContextual(ctx ->

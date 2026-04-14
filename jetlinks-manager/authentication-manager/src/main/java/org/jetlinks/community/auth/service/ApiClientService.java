@@ -45,28 +45,14 @@ public class ApiClientService extends GenericReactiveCrudService<ApiClientEntity
 
     private final ReactiveRedisOperations<Object, Object> redis;
 
-    /**
-     * 新增客户端，自动生成 SecretId（AccessKey）
-     *
-     * @param entity 客户端实体
-     * @return 保存结果
-     */
     public Mono<ApiClientEntity> createClient(ApiClientEntity entity) {
         if (!org.springframework.util.StringUtils.hasText(entity.getSecretId())) {
-            // 自动生成 AccessKey： AK- 前缀 + 16 位大写字母数字
             String raw = IDGenerator.MD5.generate().toUpperCase().replaceAll("[^A-Z0-9]", "");
             entity.setSecretId("AK-" + (raw.length() >= 16 ? raw.substring(0, 16) : raw));
         }
         return this.insert(Mono.just(entity)).thenReturn(entity);
     }
 
-    /**
-     * 生成/重置 AccessKey + SecretKey
-     * SecretKey 生成随机字符串，明文仅此次返回，数据库存储明文（可按需改为加密）
-     *
-     * @param clientId 客户端 ID
-     * @return 包含明文 SecretKey 的响应对象
-     */
     public Mono<ApiClientKeyResponse> generateKeys(String clientId) {
         String newSecretKey = IDGenerator.MD5.generate() + IDGenerator.MD5.generate();
         return this
