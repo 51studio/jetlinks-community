@@ -81,11 +81,11 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
      * @return 保存后的实体（password 字段已清空）
      */
     public Mono<AppUserEntity> register(AppUserEntity entity) {
-        if (entity.getClientId() == null || entity.getClientId().isBlank()) {
+        if (entity.getAppId() == null || entity.getAppId().isBlank()) {
             return Mono.error(new BusinessException("error.api_client_id_required", 400));
         }
         return apiClientService
-            .getByClientId(entity.getClientId())
+            .getByAppId(entity.getAppId())
             .switchIfEmpty(Mono.error(new BusinessException("error.api_client_not_found", 404)))
             .flatMap(client -> {
                 if (client.getState() != ApiClientState.enabled) {
@@ -93,7 +93,7 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
                 }
                 return this
                     .createQuery()
-                    .where(AppUserEntity::getClientId, entity.getClientId())
+                    .where(AppUserEntity::getAppId, entity.getAppId())
                     .and(AppUserEntity::getUsername, entity.getUsername())
                     .count()
                     .flatMap(count -> {
@@ -120,13 +120,13 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     /**
      * 用户名 + 密码登录，成功后颌发 Bearer Token
      *
-     * @param clientId 客户端 ID
+     * @param appId 应用 ID
      * @param username 用户名
      * @param password 明文密码
      * @return UserToken（含 token 字符串）
      */
-    public Mono<UserToken> login(String clientId, String username, String password) {
-        return getByUsername(clientId, username)
+    public Mono<UserToken> login(String appId, String username, String password) {
+        return getByUsername(appId, username)
             .switchIfEmpty(Mono.error(new BusinessException("error.app_user_not_found", HttpStatus.NOT_FOUND.value())))
             .flatMap(user -> {
                 if (user.getStatus() == null || user.getStatus() == 0) {
@@ -183,17 +183,17 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     // -----------------------------------------------------------------------
 
     /**
-     * 根据 clientId + 用户名查询（Redis 缓存 10min）
+     * 根据 appId + 用户名查询（Redis 缓存 10min）
      */
-    public Mono<AppUserEntity> getByUsername(String clientId, String username) {
-        String key = CACHE_PREFIX_BY_NAME + clientId + ":" + username;
+    public Mono<AppUserEntity> getByUsername(String appId, String username) {
+        String key = CACHE_PREFIX_BY_NAME + appId + ":" + username;
         return redis
             .opsForValue()
             .get(key)
             .cast(AppUserEntity.class)
             .switchIfEmpty(Mono.defer(() -> this
                 .createQuery()
-                .where(AppUserEntity::getClientId, clientId)
+                .where(AppUserEntity::getAppId, appId)
                 .and(AppUserEntity::getUsername, username)
                 .fetchOne()
                 .flatMap(entity -> redis
@@ -204,10 +204,10 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     }
 
     /**
-     * 按 clientId 分页查询 AppUser
+     * 按 appId 分页查询 AppUser
      */
-    public Mono<PagerResult<AppUserEntity>> queryByClientId(String clientId, QueryParamEntity query) {
-        query.and("clientId", TermType.eq, clientId);
+    public Mono<PagerResult<AppUserEntity>> queryByAppId(String appId, QueryParamEntity query) {
+        query.and("appId", TermType.eq, appId);
         return queryPager(query);
     }
 
@@ -263,11 +263,11 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
     }
 
     /**
-     * 清除 Redis 缓存（通过 userId 自动查找 clientId）
+     * 清除 Redis 缓存（通过 userId 自动查找 appId）
      */
     public Mono<Void> evictCache(String userId, String username) {
         return findById(userId)
-            .flatMap(user -> evictCache(userId, user.getClientId(), username))
+            .flatMap(user -> evictCache(userId, user.getAppId(), username))
             .switchIfEmpty(redis.delete(CACHE_PREFIX_BY_ID + userId).then());
     }
 

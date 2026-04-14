@@ -33,7 +33,6 @@ import org.springframework.context.event.EventListener;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.function.Consumer;
 
 /**
@@ -50,9 +49,6 @@ public class LocalProtocolSupportManager
     private final DataReferenceManager referenceManager;
 
     private final ReactiveRepository<ProtocolSupportEntity, String> repository;
-
-    private final Duration loadProtocolTimeout =
-        Duration.ofSeconds(Integer.getInteger("jetlinks.device.protocol.load.timeout", 30));
 
 
     public LocalProtocolSupportManager(DataReferenceManager referenceManager,
@@ -155,10 +151,16 @@ public class LocalProtocolSupportManager
                 .map(ProtocolSupportEntity::toDefinition)
                 .flatMap(def -> this
                     .init(def)
+                    .doOnError(err -> log.error("协议[{}]初始化失败，但继续启动应用:", def.getId(), err))
                     .onErrorResume(err -> Mono.empty()))
-                .blockLast(loadProtocolTimeout);
+                .subscribe(
+                    unused -> {},
+                    error -> log.warn("加载协议流发生错误:", error),
+                    () -> log.info("协议初始化完成")
+                );
+            log.info("协议初始化任务已提交，继续应用启动");
         } catch (Throwable error) {
-            log.warn("load protocol error", error);
+            log.warn("load protocol error, but application will continue to start", error);
         }
     }
 

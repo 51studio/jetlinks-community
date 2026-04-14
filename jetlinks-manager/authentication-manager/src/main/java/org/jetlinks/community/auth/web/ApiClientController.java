@@ -221,7 +221,7 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     public Mono<PagerResult<AppUserEntity>> queryAppUsers(
         @PathVariable @Parameter(description = "客户端ID") String clientId,
         @RequestBody Mono<QueryParamEntity> query) {
-        return query.flatMap(q -> appUserService.queryByClientId(clientId, q));
+        return query.flatMap(q -> appUserService.queryByAppId(clientId, q));
     }
 
     @PostMapping("/{clientId}/user/_create")
@@ -230,7 +230,7 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
     public Mono<AppUserEntity> createAppUser(
         @PathVariable @Parameter(description = "客户端ID") String clientId,
         @RequestBody AppUserEntity entity) {
-        entity.setClientId(clientId);
+        entity.setAppId(clientId);
         return appUserService.register(entity);
     }
 
@@ -243,7 +243,7 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
         return appUserService.createUpdate()
             .set(AppUserEntity::getStatus, (byte) 0)
             .where(AppUserEntity::getId, userId)
-            .and(AppUserEntity::getClientId, clientId)
+            .and(AppUserEntity::getAppId, clientId)
             .execute()
             .then();
     }
@@ -257,7 +257,7 @@ public class ApiClientController implements ReactiveServiceCrudController<ApiCli
         return appUserService.createUpdate()
             .set(AppUserEntity::getStatus, (byte) 1)
             .where(AppUserEntity::getId, userId)
-            .and(AppUserEntity::getClientId, clientId)
+            .and(AppUserEntity::getAppId, clientId)
             .execute()
             .then();
     }

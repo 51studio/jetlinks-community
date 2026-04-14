@@ -67,7 +67,7 @@ public class AppUserController {
     @Operation(summary = "第三方用户登录，返回 token 和 userId")
     public Mono<LoginResponse> login(@RequestBody LoginRequest request) {
         return appUserService
-            .login(request.getClientId(), request.getUsername(), request.getPassword())
+            .login(request.getAppId(), request.getUsername(), request.getPassword())
             .map(userToken -> new LoginResponse(userToken.getToken(), userToken.getUserId()));
     }
 
@@ -155,7 +155,7 @@ public class AppUserController {
         return currentAppUser()
             .flatMap(currentUser ->
                 apiClientService
-                    .getByClientId(currentUser.getClientId())
+                    .getByAppId(currentUser.getAppId())
                     .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "API client not found")))
                     .flatMap(client -> {
                         if (client.getState() != org.jetlinks.community.auth.enums.ApiClientState.enabled) {
@@ -196,7 +196,7 @@ public class AppUserController {
     @Getter
     @Setter
     public static class LoginRequest {
-        private String clientId;
+        private String appId;
         private String username;
         private String password;
     }
@@ -227,7 +227,7 @@ public class AppUserController {
     @Getter
     @AllArgsConstructor
     public static class ApiClientTokenResponse {
-        private String clientId;
+        private String appId;
         private String token;
         private boolean isNewToken;
     }

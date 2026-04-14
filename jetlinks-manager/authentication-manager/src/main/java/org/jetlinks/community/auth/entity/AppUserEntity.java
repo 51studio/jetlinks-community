@@ -43,8 +43,8 @@ import jakarta.validation.constraints.NotBlank;
 @Getter
 @Setter
 @Table(name = "s_app_user", indexes = {
-    @Index(name = "idx_app_user_client_username", columnList = "client_id,username", unique = true),
-    @Index(name = "idx_app_user_client_id", columnList = "client_id"),
+    @Index(name = "idx_app_user_app_username", columnList = "app_id,username", unique = true),
+    @Index(name = "idx_app_user_app_id", columnList = "app_id"),
     @Index(name = "idx_app_user_phone", columnList = "phone"),
     @Index(name = "idx_app_user_email", columnList = "email")
 })
@@ -59,9 +59,9 @@ public class AppUserEntity extends GenericEntity<String> implements RecordCreati
     }
 
     @Schema(description = "所属第三方应用 ID（必填）")
-    @Column(name = "client_id", nullable = false, length = 64, updatable = false)
+    @Column(name = "app_id", nullable = false, length = 64, updatable = false)
     @NotBlank(message = "所属第三方应用ID不能为空", groups = CreateGroup.class)
-    private String clientId;
+    private String appId;
 
     @Schema(description = "用户名（登录账号，唯一）")
     @Column(nullable = false, length = 64, updatable = false)
