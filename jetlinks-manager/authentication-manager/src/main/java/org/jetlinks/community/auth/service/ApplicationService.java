@@ -27,7 +27,6 @@ import org.hswebframework.web.system.authorization.api.service.reactive.Reactive
 import org.hswebframework.web.system.authorization.defaults.service.DefaultDimensionUserService;
 import org.jetlinks.community.auth.entity.*;
 import org.jetlinks.community.auth.enums.ApiClientState;
-import org.jetlinks.community.auth.enums.AppTypeEnum;
 import org.jetlinks.community.auth.enums.ApplicationProvider;
 import org.jetlinks.community.auth.enums.DefaultUserEntityType;
 import org.jetlinks.community.auth.web.ApplicationController;
@@ -77,7 +76,7 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
         return this.insert(Mono.just(entity))
             .thenReturn(entity)
             .flatMap(app -> {
-                if (app.getAppType() == AppTypeEnum.thirdParty) {
+                if ("third-party".equals(app.getProvider())) {
                     return createAppUserAndBind(app).thenReturn(app);
                 }
                 return Mono.just(app);
@@ -95,7 +94,7 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
                 return evictCache(id)
                     .then(findById(id))
                     .flatMap(app -> {
-                        if (app.getAppType() == AppTypeEnum.thirdParty) {
+                        if ("third-party".equals(app.getProvider())) {
                             // 简化处理：重新同步用户密码、角色和组织
                             return syncAppUser(app).thenReturn(rows);
                         }
@@ -134,7 +133,7 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
                 return evictCache(clientId)
                     .then(findById(clientId))
                     .flatMap(client -> {
-                        if (client.getAppType() == AppTypeEnum.thirdParty) {
+                        if ("third-party".equals(client.getProvider())) {
                             return userService
                                 .findByUsername(client.getAppId())
                                 .flatMap(user -> {
@@ -407,12 +406,6 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
         }
 
         entity.setSso(req.getSso());
-
-        if ("third-party".equals(req.getProvider())) {
-            entity.setAppType(AppTypeEnum.thirdParty);
-        } else {
-            entity.setAppType(AppTypeEnum.sso);
-        }
 
         if (!StringUtils.hasText(entity.getAppId())) {
             entity.setAppId(generateAppId());

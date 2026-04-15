@@ -17,10 +17,15 @@ package org.jetlinks.community.auth.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.hswebframework.ezorm.rdb.mapping.annotation.EnumCodec;
+import org.hswebframework.web.dict.I18nEnumDict;
+import org.hswebframework.web.i18n.LocaleUtils;
 import org.jetlinks.community.auth.entity.IntegrationMode;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 应用类型/提供商枚举
@@ -32,7 +37,7 @@ import java.util.List;
  */
 @Getter
 @AllArgsConstructor
-public enum ApplicationProvider {
+public enum ApplicationProvider implements I18nEnumDict<String> {
 
     INTERNAL_STANDALONE("internal-standalone", "独立应用", Arrays.asList(
         new IntegrationMode("page", "页面集成"),
@@ -106,6 +111,18 @@ public enum ApplicationProvider {
             }
         }
         return modeValue;
+    }
+
+    @Override
+    public Object getWriteJSONObject() {
+        if (isWriteJSONObjectEnabled()) {
+            Map<String, Object> jsonObject = new HashMap<>();
+            jsonObject.put("provider", provider);
+            jsonObject.put("name", name);
+            jsonObject.put("integrationModes", integrationModes);
+            return jsonObject;
+        }
+        return name();
     }
 
 }

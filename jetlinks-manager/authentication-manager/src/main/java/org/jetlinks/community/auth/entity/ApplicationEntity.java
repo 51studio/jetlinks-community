@@ -31,7 +31,6 @@ import org.hswebframework.web.crud.annotation.EnableEntityEvent;
 import org.hswebframework.web.crud.generator.Generators;
 import org.hswebframework.web.validator.CreateGroup;
 import org.jetlinks.community.auth.enums.ApiClientState;
-import org.jetlinks.community.auth.enums.AppTypeEnum;
 
 import jakarta.validation.constraints.NotBlank;
 import javax.persistence.Column;
@@ -132,12 +131,6 @@ public class ApplicationEntity extends GenericEntity<String> implements RecordCr
     @Schema(description = "应用分组")
     @Column(name = "group_id", length = 64)
     private String groupId;
-
-    @Schema(description = "应用类型(1.单点登录，2.第三方应用)")
-    @Column(name = "app_type")
-    @EnumCodec
-    @ColumnType(javaType = Integer.class)
-    private AppTypeEnum appType;
 
     @Schema(description = "允许访问的权限列表")
     @Column

@@ -54,7 +54,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/application")
 @AllArgsConstructor
-@Resource(id = "Apply", name = "应用管理", group = "system")
+@Resource(id = "application", name = "应用管理", group = "system")
 @Tag(name = "应用管理")
 public class ApplicationController {
 
