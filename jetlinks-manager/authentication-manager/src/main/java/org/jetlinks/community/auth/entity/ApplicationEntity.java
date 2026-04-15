@@ -31,42 +31,45 @@ import org.hswebframework.web.crud.annotation.EnableEntityEvent;
 import org.hswebframework.web.crud.generator.Generators;
 import org.hswebframework.web.validator.CreateGroup;
 import org.jetlinks.community.auth.enums.ApiClientState;
+import org.jetlinks.community.auth.enums.AppTypeEnum;
 
+import jakarta.validation.constraints.NotBlank;
 import javax.persistence.Column;
 import javax.persistence.Index;
 import javax.persistence.Table;
-import jakarta.validation.constraints.NotBlank;
 import java.sql.JDBCType;
 import java.util.List;
 
 /**
- * API 客户端（第三方系统对接）实体
+ * 应用管理实体
+ * <p>
+ * 支持页面集成、API客户端、API服务、单点登录等多种接入方式的统一应用管理。
  *
  * @author jetlinks
- * @since 2.3
+ * @since 2.11
  */
 @Getter
 @Setter
-@Table(name = "s_api_client", indexes = {
-    @Index(name = "idx_api_client_app_id", columnList = "app_id", unique = true)
+@Table(name = "s_application", indexes = {
+    @Index(name = "idx_application_app_id", columnList = "app_id", unique = true)
 })
-@Comment("API客户端信息表")
+@Comment("应用管理信息表")
 @EnableEntityEvent
-public class ApiClientEntity extends GenericEntity<String> implements RecordCreationEntity, RecordModifierEntity {
+public class ApplicationEntity extends GenericEntity<String> implements RecordCreationEntity, RecordModifierEntity {
 
-    @Schema(description = "客户端名称")
+    @Schema(description = "应用名称")
     @Column(nullable = false, length = 128)
-    @NotBlank(message = "客户端名称不能为空", groups = CreateGroup.class)
+    @NotBlank(message = "应用名称不能为空", groups = CreateGroup.class)
     @Length(max = 128)
     private String name;
 
-    @Schema(description = "AppId（应用标识）", accessMode = Schema.AccessMode.READ_ONLY)
-    @Column(name = "app_id", nullable = false, length = 128, updatable = false)
-    private String appId;
+    @Schema(description = "应用类型/提供商")
+    @Column(length = 64)
+    private String provider;
 
-    @Schema(description = "SecretKey（AES加密存储，仅创建或重置时返回明文）", accessMode = Schema.AccessMode.READ_ONLY)
-    @Column(name = "secret_key", length = 256)
-    private String secretKey;
+    @Schema(description = "Logo地址")
+    @Column(name = "logo_url", length = 512)
+    private String logoUrl;
 
     @Schema(description = "说明")
     @Column(length = 2000)
@@ -79,11 +82,43 @@ public class ApiClientEntity extends GenericEntity<String> implements RecordCrea
     @DefaultValue("enabled")
     private ApiClientState state;
 
-    @Schema(description = "允许访问的权限列表")
-    @Column
+    @Schema(description = "AppId（应用标识）", accessMode = Schema.AccessMode.READ_ONLY)
+    @Column(name = "app_id", length = 128, unique = true)
+    private String appId;
+
+    @Schema(description = "SecretKey（AES加密存储，仅创建或重置时返回明文）", accessMode = Schema.AccessMode.READ_ONLY)
+    @Column(name = "secret_key", length = 256)
+    private String secretKey;
+
+    @Schema(description = "接入方式")
+    @Column(name = "integration_modes")
     @JsonCodec
     @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
-    private List<PermissionInfo> permissions;
+    private List<IntegrationMode> integrationModes;
+
+    @Schema(description = "页面集成配置")
+    @Column(name = "page_conf")
+    @JsonCodec
+    @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
+    private ApplicationPageConfig page;
+
+    @Schema(description = "API客户端配置")
+    @Column(name = "api_client_conf")
+    @JsonCodec
+    @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
+    private ApplicationApiClientConfig apiClient;
+
+    @Schema(description = "API服务配置")
+    @Column(name = "api_server_conf")
+    @JsonCodec
+    @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
+    private ApplicationApiServerConfig apiServer;
+
+    @Schema(description = "单点登录配置")
+    @Column(name = "sso_conf")
+    @JsonCodec
+    @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
+    private ApplicationSsoConfig sso;
 
     @Schema(description = "IP白名单，多个IP用英文逗号分隔，为空表示不限制")
     @Column(name = "ip_white_list", length = 2000)
@@ -93,6 +128,22 @@ public class ApiClientEntity extends GenericEntity<String> implements RecordCrea
     @Column(name = "rate_limit")
     @DefaultValue("0")
     private Integer rateLimit;
+
+    @Schema(description = "应用分组")
+    @Column(name = "group_id", length = 64)
+    private String groupId;
+
+    @Schema(description = "应用类型(1.单点登录，2.第三方应用)")
+    @Column(name = "app_type")
+    @EnumCodec
+    @ColumnType(javaType = Integer.class)
+    private AppTypeEnum appType;
+
+    @Schema(description = "允许访问的权限列表")
+    @Column
+    @JsonCodec
+    @ColumnType(jdbcType = JDBCType.LONGVARCHAR, javaType = String.class)
+    private List<PermissionInfo> permissions;
 
     @Schema(description = "创建者ID", accessMode = Schema.AccessMode.READ_ONLY)
     @Column(length = 64, updatable = false)

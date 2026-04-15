@@ -26,7 +26,7 @@ import org.hswebframework.web.exception.BusinessException;
 import org.hswebframework.web.id.IDGenerator;
 import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.ApiClientState;
-import org.jetlinks.community.auth.service.ApiClientService;
+import org.jetlinks.community.auth.service.ApplicationService;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
 import org.springframework.http.HttpStatus;
@@ -59,14 +59,14 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
 
     private final ReactiveRedisOperations<Object, Object> redis;
     private final UserTokenManager userTokenManager;
-    private final ApiClientService apiClientService;
+    private final ApplicationService applicationService;
 
     public AppUserService(ReactiveRedisOperations<Object, Object> redis,
                           UserTokenManager userTokenManager,
-                          ApiClientService apiClientService) {
+                          ApplicationService applicationService) {
         this.redis = redis;
         this.userTokenManager = userTokenManager;
-        this.apiClientService = apiClientService;
+        this.applicationService = applicationService;
     }
 
     // -----------------------------------------------------------------------
@@ -84,7 +84,7 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
         if (entity.getAppId() == null || entity.getAppId().isBlank()) {
             return Mono.error(new BusinessException("error.api_client_id_required", 400));
         }
-        return apiClientService
+        return applicationService
             .getByAppId(entity.getAppId())
             .switchIfEmpty(Mono.error(new BusinessException("error.api_client_not_found", 404)))
             .flatMap(client -> {
@@ -176,6 +176,41 @@ public class AppUserService extends GenericReactiveCrudService<AppUserEntity, St
                     .execute()
                     .then(evictCache(userId, user.getUsername()));
             });
+    }
+
+    /**
+     * 根据用户ID重置密码（不需要旧密码，用于系统重置）
+     *
+     * @param userId    用户ID
+     * @param newPwd    新密码（明文）
+     */
+    public Mono<Void> resetPasswordById(String userId, String newPwd) {
+        return findById(userId)
+            .switchIfEmpty(Mono.error(new BusinessException("error.app_user_not_found", 404)))
+            .flatMap(user -> this
+                .createUpdate()
+                .set(AppUserEntity::getPassword, encodePassword(newPwd))
+                .where(AppUserEntity::getId, userId)
+                .execute()
+                .then(evictCache(userId, user.getUsername())));
+    }
+
+    /**
+     * 根据应用ID和用户名重置密码
+     *
+     * @param appId     应用ID
+     * @param username  用户名
+     * @param newPwd    新密码（明文）
+     */
+    public Mono<Void> resetPassword(String appId, String username, String newPwd) {
+        return getByUsername(appId, username)
+            .switchIfEmpty(Mono.error(new BusinessException("error.app_user_not_found", 404)))
+            .flatMap(user -> this
+                .createUpdate()
+                .set(AppUserEntity::getPassword, encodePassword(newPwd))
+                .where(AppUserEntity::getId, user.getId())
+                .execute()
+                .then(evictCache(user.getId(), user.getUsername())));
     }
 
     // -----------------------------------------------------------------------

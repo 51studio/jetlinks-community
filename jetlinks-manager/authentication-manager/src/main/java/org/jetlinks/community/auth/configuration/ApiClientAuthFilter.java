@@ -22,13 +22,13 @@ import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.authorization.simple.SimpleAuthentication;
 import org.hswebframework.web.authorization.simple.SimplePermission;
 import org.hswebframework.web.authorization.simple.SimpleUser;
-import org.jetlinks.community.auth.entity.ApiClientEntity;
+import org.jetlinks.community.auth.entity.ApplicationEntity;
 import org.jetlinks.community.auth.entity.PermissionInfo;
 import org.jetlinks.community.auth.enums.ApiClientState;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientRateLimiter;
-import org.jetlinks.community.auth.service.ApiClientService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.jetlinks.community.auth.service.ApplicationService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -73,20 +73,20 @@ public class ApiClientAuthFilter implements WebFilter {
      */
     private static final long SIGN_VALID_MILLIS = 5 * 60 * 1000L;
 
-    private final ApiClientService apiClientService;
+    private final ApplicationService applicationService;
     private final ApiClientTokenService apiClientTokenService;
     private final ApiClientRateLimiter rateLimiter;
     private final ApiClientAccessLogService accessLogService;
     private final ReactiveAuthenticationManager authenticationManager;
     private final UserTokenManager userTokenManager;
 
-    public ApiClientAuthFilter(ApiClientService apiClientService,
+    public ApiClientAuthFilter(ApplicationService applicationService,
                                ApiClientTokenService apiClientTokenService,
                                ApiClientRateLimiter rateLimiter,
                                ApiClientAccessLogService accessLogService,
                                ReactiveAuthenticationManager authenticationManager,
                                UserTokenManager userTokenManager) {
-        this.apiClientService = apiClientService;
+        this.applicationService = applicationService;
         this.apiClientTokenService = apiClientTokenService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
@@ -131,7 +131,7 @@ public class ApiClientAuthFilter implements WebFilter {
                 }
                 return userTokenManager
                     .touch(userToken.getToken())
-                    .then(apiClientService.getByClientId(userToken.getUserId()))
+                    .then(applicationService.getByClientId(userToken.getUserId()))
                     .flatMap(client -> authenticate(client, exchange, chain));
             })
             .switchIfEmpty(Mono.defer(() -> chain.filter(exchange)));
@@ -159,7 +159,7 @@ public class ApiClientAuthFilter implements WebFilter {
             return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid");
         }
 
-        return apiClientService
+        return applicationService
             .getByAppId(appId)
             .flatMap(client -> {
                 // 验证签名
@@ -172,7 +172,7 @@ public class ApiClientAuthFilter implements WebFilter {
             .switchIfEmpty(writeError(exchange, HttpStatus.UNAUTHORIZED, "error.api_client_sign_invalid"));
     }
 
-    private Mono<Void> authenticate(ApiClientEntity client,
+    private Mono<Void> authenticate(ApplicationEntity client,
                                     ServerWebExchange exchange,
                                     WebFilterChain chain) {
         if (client.getState() == ApiClientState.disabled) {
@@ -241,7 +241,7 @@ public class ApiClientAuthFilter implements WebFilter {
     /**
      * 根据 API 客户端配置构建 Authentication 对象
      */
-    private Authentication buildAuthentication(ApiClientEntity client) {
+    private Authentication buildAuthentication(ApplicationEntity client) {
         SimpleUser user = new SimpleUser();
         user.setId(client.getId());
         user.setName(client.getName());

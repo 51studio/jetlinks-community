@@ -21,8 +21,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.jetlinks.community.auth.entity.AppUserEntity;
-import org.jetlinks.community.auth.service.ApiClientService;
+import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
 import org.jetlinks.community.auth.service.AppUserService;
 import org.springframework.http.HttpStatus;
@@ -41,10 +42,11 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/app/user")
 @Tag(name = "第三方用户接口")
 @AllArgsConstructor
+@Slf4j
 public class AppUserController {
 
     private final AppUserService appUserService;
-    private final ApiClientService apiClientService;
+    private final ApplicationService applicationService;
     private final ApiClientTokenService apiClientTokenService;
 
     // -----------------------------------------------------------------------
@@ -154,7 +156,7 @@ public class AppUserController {
     public Mono<ApiClientTokenResponse> getApiClientToken() {
         return currentAppUser()
             .flatMap(currentUser ->
-                apiClientService
+                applicationService
                     .getByAppId(currentUser.getAppId())
                     .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "API client not found")))
                     .flatMap(client -> {
@@ -168,9 +170,24 @@ public class AppUserController {
                                 apiClientTokenService
                                     .issueToken(client.getId())
                                     .map(newToken -> new ApiClientTokenResponse(client.getId(), newToken, true))
-                            );
+                            )
+                            .onErrorResume(err -> {
+                                log.error("获取 API Client Token 失败: appId={}, error={}", client.getId(), err.getMessage(), err);
+                                return Mono.error(new ResponseStatusException(
+                                    HttpStatus.INTERNAL_SERVER_ERROR, 
+                                    "Failed to get API client token: " + err.getMessage()));
+                            });
                     })
-            );
+            )
+            .onErrorResume(err -> {
+                log.error("获取 API Client Token 失败: error={}", err.getMessage(), err);
+                if (err instanceof ResponseStatusException) {
+                    return Mono.error(err);
+                }
+                return Mono.error(new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR, 
+                    "Failed to get API client token: " + err.getMessage()));
+            });
     }
 
     // -----------------------------------------------------------------------

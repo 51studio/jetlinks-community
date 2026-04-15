@@ -27,8 +27,8 @@ import org.jetlinks.community.auth.dimension.UserAuthenticationEventPublisher;
 import org.jetlinks.community.auth.enums.UserEntityType;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientRateLimiter;
-import org.jetlinks.community.auth.service.ApiClientService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.AppUserService;
 import org.jetlinks.community.auth.web.WebFluxUserController;
 import org.jetlinks.core.event.EventBus;
@@ -99,8 +99,8 @@ public class CustomAuthenticationConfiguration {
     @Order(AppUserAuthFilter.ORDER)
     public AppUserAuthFilter appUserAuthFilter(AppUserService appUserService,
                                                UserTokenManager userTokenManager,
-                                               ApiClientService apiClientService) {
-        return new AppUserAuthFilter(appUserService, userTokenManager, apiClientService);
+                                               ApplicationService applicationService) {
+        return new AppUserAuthFilter(appUserService, userTokenManager, applicationService);
     }
 
     /**
@@ -108,13 +108,13 @@ public class CustomAuthenticationConfiguration {
      */
     @Bean
     @Order(ApiClientAuthFilter.ORDER)
-    public ApiClientAuthFilter apiClientAuthFilter(ApiClientService apiClientService,
+    public ApiClientAuthFilter apiClientAuthFilter(ApplicationService applicationService,
                                                    ApiClientTokenService apiClientTokenService,
                                                    ApiClientRateLimiter apiClientRateLimiter,
                                                    ApiClientAccessLogService accessLogService,
                                                    ReactiveAuthenticationManager reactiveAuthenticationManager,
                                                    UserTokenManager userTokenManager) {
-        return new ApiClientAuthFilter(apiClientService,
+        return new ApiClientAuthFilter(applicationService,
                                        apiClientTokenService,
                                        apiClientRateLimiter,
                                        accessLogService,

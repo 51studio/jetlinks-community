@@ -18,7 +18,7 @@ package org.jetlinks.community.auth.service;
 import lombok.AllArgsConstructor;
 import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.id.IDGenerator;
-import org.jetlinks.community.auth.entity.ApiClientEntity;
+import org.jetlinks.community.auth.entity.ApplicationEntity;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -41,7 +41,7 @@ public class ApiClientTokenService {
     private static final long TOKEN_TTL = Duration.ofHours(24).toMillis();
 
     private final UserTokenManager userTokenManager;
-    private final ApiClientService apiClientService;
+    private final ApplicationService applicationService;
 
     /**
      * 为指定客户端颁发 Bearer Token（TTL 24h）
@@ -90,11 +90,11 @@ public class ApiClientTokenService {
      * @param token Bearer Token 字符串
      * @return API 客户端实体，Token 无效或已过期时返回 empty
      */
-    public Mono<ApiClientEntity> getClientByToken(String token) {
+    public Mono<ApplicationEntity> getClientByToken(String token) {
         return userTokenManager
             .getByToken(token)
             .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
-            .flatMap(userToken -> apiClientService.getByClientId(userToken.getUserId()));
+            .flatMap(userToken -> applicationService.getByClientId(userToken.getUserId()));
     }
 
     /**

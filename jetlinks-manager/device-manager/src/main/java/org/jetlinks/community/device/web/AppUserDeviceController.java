@@ -22,6 +22,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
 import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
@@ -45,6 +46,7 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/app/user/device")
 @Tag(name = "第三方用户设备绑定接口")
 @AllArgsConstructor
+@Slf4j
 public class AppUserDeviceController {
 
     private final AppUserDeviceService deviceService;
@@ -66,6 +68,10 @@ public class AppUserDeviceController {
                     .getDeviceState(binding.getDeviceId())
                     .map(state -> new DeviceBindingInfo(binding, state))
                     .defaultIfEmpty(new DeviceBindingInfo(binding, DeviceState.notActive))
+                    .onErrorResume(err -> {
+                        log.warn("获取设备状态失败: deviceId={}, error={}", binding.getDeviceId(), err.getMessage());
+                        return Mono.just(new DeviceBindingInfo(binding, DeviceState.notActive));
+                    })
                 )
             );
     }
@@ -82,6 +88,10 @@ public class AppUserDeviceController {
                     .getDeviceState(binding.getDeviceId())
                     .map(state -> new DeviceBindingInfo(binding, state))
                     .defaultIfEmpty(new DeviceBindingInfo(binding, DeviceState.notActive))
+                    .onErrorResume(err -> {
+                        log.warn("获取设备状态失败: deviceId={}, error={}", deviceId, err.getMessage());
+                        return Mono.just(new DeviceBindingInfo(binding, DeviceState.notActive));
+                    })
                 )
             );
     }

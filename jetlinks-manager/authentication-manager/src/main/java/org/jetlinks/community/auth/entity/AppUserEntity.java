@@ -19,6 +19,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
+import org.hswebframework.ezorm.rdb.mapping.annotation.ColumnType;
 import org.hswebframework.ezorm.rdb.mapping.annotation.Comment;
 import org.hswebframework.ezorm.rdb.mapping.annotation.DefaultValue;
 import org.hswebframework.web.api.crud.entity.GenericEntity;
@@ -101,6 +102,12 @@ public class AppUserEntity extends GenericEntity<String> implements RecordCreati
     @Schema(description = "第三方用户 ID（预留）")
     @Column(name = "third_party_id", length = 256)
     private String thirdPartyId;
+
+    @Schema(description = "用户类型：user-普通用户，application-第三方用户")
+    @Column(name = "user_type", length = 32)
+    @ColumnType(javaType = String.class)
+    @DefaultValue("application")
+    private String userType;
 
     @Schema(description = "创建者 ID", accessMode = Schema.AccessMode.READ_ONLY)
     @Column(length = 64, updatable = false)

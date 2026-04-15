@@ -22,7 +22,7 @@ import org.hswebframework.web.authorization.simple.SimpleAuthentication;
 import org.hswebframework.web.authorization.simple.SimpleUser;
 import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.ApiClientState;
-import org.jetlinks.community.auth.service.ApiClientService;
+import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.AppUserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -53,14 +53,14 @@ public class AppUserAuthFilter implements WebFilter {
 
     private final AppUserService appUserService;
     private final UserTokenManager userTokenManager;
-    private final ApiClientService apiClientService;
+    private final ApplicationService applicationService;
 
     public AppUserAuthFilter(AppUserService appUserService,
                              UserTokenManager userTokenManager,
-                             ApiClientService apiClientService) {
+                             ApplicationService applicationService) {
         this.appUserService = appUserService;
         this.userTokenManager = userTokenManager;
-        this.apiClientService = apiClientService;
+        this.applicationService = applicationService;
     }
 
     @Override
@@ -91,7 +91,7 @@ public class AppUserAuthFilter implements WebFilter {
                         if (appUser.getStatus() == null || appUser.getStatus() == 0) {
                             return writeError(exchange, HttpStatus.FORBIDDEN, "error.app_user_disabled");
                         }
-                        return apiClientService.getByAppId(appUser.getAppId())
+                        return applicationService.getByAppId(appUser.getAppId())
                             .flatMap(client -> {
                                 if (client.getState() != ApiClientState.enabled) {
                                     return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
