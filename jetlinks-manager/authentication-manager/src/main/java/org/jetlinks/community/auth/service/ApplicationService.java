@@ -21,18 +21,15 @@ import org.hswebframework.ezorm.core.param.TermType;
 import org.hswebframework.web.crud.service.GenericReactiveCrudService;
 import org.hswebframework.web.exception.BusinessException;
 import org.hswebframework.web.id.IDGenerator;
-import org.hswebframework.web.system.authorization.api.entity.DimensionUserEntity;
 import org.hswebframework.web.system.authorization.api.entity.UserEntity;
 import org.hswebframework.web.system.authorization.api.service.reactive.ReactiveUserService;
-import org.hswebframework.web.system.authorization.defaults.service.DefaultDimensionUserService;
 import org.jetlinks.community.auth.entity.*;
 import org.jetlinks.community.auth.enums.ApiClientState;
 import org.jetlinks.community.auth.enums.ApplicationProvider;
 import org.jetlinks.community.auth.enums.DefaultUserEntityType;
 import org.jetlinks.community.auth.web.ApplicationController;
 import org.jetlinks.community.auth.web.request.ApplicationSaveRequest;
-import org.jetlinks.community.auth.web.response.ApiClientKeyResponse;
-import org.jetlinks.community.authorize.OrgDimensionType;
+
 import org.jetlinks.community.config.ConfigManager;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
@@ -67,12 +64,14 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
     private final ReactiveUserService userService;
     private final RoleService roleService;
     private final OrganizationService organizationService;
-    private final DefaultDimensionUserService dimensionUserService;
 
     // ----------------------------- 新增/修改/查询 -----------------------------
 
     public Mono<ApplicationEntity> createApplication(ApplicationSaveRequest request) {
         ApplicationEntity entity = convertRequestToEntity(request);
+        if (entity.getState() == null) {
+            entity.setState(ApiClientState.enabled);
+        }
         return this.insert(Mono.just(entity))
             .thenReturn(entity)
             .flatMap(app -> {
@@ -115,54 +114,6 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
                 entity.getApiServer().setAppId(entity.getId());
                 entity.getApiServer().setSecureKey(entity.getSecretKey());
             });
-    }
-
-    // ----------------------------- 密钥与状态 -----------------------------
-
-    public Mono<ApiClientKeyResponse> generateKeys(String clientId) {
-        String newSecretKey = IDGenerator.MD5.generate() + IDGenerator.MD5.generate();
-        return this
-            .createUpdate()
-            .set(ApplicationEntity::getSecretKey, newSecretKey)
-            .where(ApplicationEntity::getId, clientId)
-            .execute()
-            .flatMap(rows -> {
-                if (rows == 0) {
-                    return Mono.error(() -> new BusinessException("error.application_not_found"));
-                }
-                return evictCache(clientId)
-                    .then(findById(clientId))
-                    .flatMap(client -> {
-                        if ("third-party".equals(client.getProvider())) {
-                            return userService
-                                .findByUsername(client.getAppId())
-                                .flatMap(user -> {
-                                    user.setPassword(newSecretKey);
-                                    return userService.saveUser(Mono.just(user));
-                                })
-                                .thenReturn(ApiClientKeyResponse.of(clientId, newSecretKey));
-                        }
-                        return Mono.just(ApiClientKeyResponse.of(clientId, newSecretKey));
-                    });
-            });
-    }
-
-    public Mono<Void> enable(String clientId) {
-        return this
-            .createUpdate()
-            .set(ApplicationEntity::getState, ApiClientState.enabled)
-            .where(ApplicationEntity::getId, clientId)
-            .execute()
-            .then(evictCache(clientId));
-    }
-
-    public Mono<Void> disable(String clientId) {
-        return this
-            .createUpdate()
-            .set(ApplicationEntity::getState, ApiClientState.disabled)
-            .where(ApplicationEntity::getId, clientId)
-            .execute()
-            .then(evictCache(clientId));
     }
 
     // ----------------------------- 缓存 -----------------------------
@@ -212,19 +163,20 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
 
     // ----------------------------- API授权 -----------------------------
 
-    public Mono<List<PermissionInfo>> getOperations() {
+    public Mono<List<String>> getOperations() {
         return configManager
             .getProperties(OPERATIONS_SCOPE)
             .map(props -> {
                 Object operations = props.get("operations");
-                List<PermissionInfo> result = new ArrayList<>();
+                if (operations instanceof Optional<?>) {
+                    operations = ((Optional<?>) operations).orElse(null);
+                }
+                List<String> result = new ArrayList<>();
                 if (operations instanceof List) {
                     List<?> list = (List<?>) operations;
                     for (Object item : list) {
                         if (item instanceof String) {
-                            PermissionInfo info = new PermissionInfo();
-                            info.setPermission((String) item);
-                            result.add(info);
+                            result.add((String) item);
                         }
                     }
                 }
@@ -242,6 +194,9 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
             .getProperties(OPERATIONS_SCOPE)
             .flatMap(props -> {
                 Object existing = props.get("operations");
+                if (existing instanceof Optional<?>) {
+                    existing = ((Optional<?>) existing).orElse(null);
+                }
                 Set<String> operationSet = new HashSet<>();
                 if (existing instanceof List) {
                     ((List<?>) existing).forEach(item -> {
@@ -267,6 +222,9 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
             .getProperties(OPERATIONS_SCOPE)
             .flatMap(props -> {
                 Object existing = props.get("operations");
+                if (existing instanceof Optional<?>) {
+                    existing = ((Optional<?>) existing).orElse(null);
+                }
                 if (!(existing instanceof List)) {
                     return Mono.empty();
                 }
@@ -318,53 +276,6 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
             .then();
     }
 
-    // ----------------------------- 角色与组织 -----------------------------
-
-    public Mono<Void> bindRole(String clientId, List<String> roleIdList) {
-        return roleService.bindUser(Collections.singleton(clientId), roleIdList, false);
-    }
-
-    public Mono<Void> unbindRole(String clientId, List<String> roleIdList) {
-        return roleService.unbindUser(Collections.singleton(clientId), roleIdList);
-    }
-
-    public Mono<org.hswebframework.web.api.crud.entity.PagerResult<DimensionUserEntity>> queryBoundRoles(
-        String clientId,
-        org.hswebframework.web.api.crud.entity.QueryParamEntity query) {
-        query.and("userId", TermType.eq, clientId);
-        query.and("dimensionTypeId", TermType.eq, org.hswebframework.web.authorization.DefaultDimensionType.role.getId());
-        return dimensionUserService.queryPager(query);
-    }
-
-    public Mono<Void> bindOrg(String clientId, List<String> orgIds) {
-        return organizationService.bindUser(
-            Collections.singleton(clientId),
-            orgIds != null ? orgIds : Collections.emptyList(),
-            false)
-            .then();
-    }
-
-    public Mono<Void> unbindOrg(String clientId, List<String> orgIds) {
-        List<String> ids = orgIds != null ? orgIds : Collections.emptyList();
-        if (ids.isEmpty()) {
-            return Mono.empty();
-        }
-        return dimensionUserService.createDelete()
-            .where(DimensionUserEntity::getUserId, clientId)
-            .and(DimensionUserEntity::getDimensionTypeId, OrgDimensionType.org.getId())
-            .in(DimensionUserEntity::getDimensionId, ids)
-            .execute()
-            .then();
-    }
-
-    public Mono<org.hswebframework.web.api.crud.entity.PagerResult<DimensionUserEntity>> queryBoundOrgs(
-        String clientId,
-        org.hswebframework.web.api.crud.entity.QueryParamEntity query) {
-        query.and("userId", TermType.eq, clientId);
-        query.and("dimensionTypeId", TermType.eq, OrgDimensionType.org.getId());
-        return dimensionUserService.queryPager(query);
-    }
-
     // ----------------------------- 私有方法 -----------------------------
 
     private ApplicationEntity convertRequestToEntity(ApplicationSaveRequest req) {
@@ -392,9 +303,9 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
             }
             ApplicationApiServerConfig server = new ApplicationApiServerConfig();
             BeanUtils.copyProperties(req.getApiServer(), server);
-            server.setAppId(null);
-            server.setSecureKey(null);
             entity.setApiServer(server);
+            entity.setAppId(server.getAppId());
+            entity.setSecretKey(server.getSecureKey());
         }
 
         entity.setPage(req.getPage());
@@ -406,21 +317,9 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
         }
 
         entity.setSso(req.getSso());
-
-        if (!StringUtils.hasText(entity.getAppId())) {
-            entity.setAppId(generateAppId());
-        }
-
-        if (entity.getState() == null) {
-            entity.setState(ApiClientState.enabled);
-        }
+        entity.setState(req.getState());
 
         return entity;
-    }
-
-    private String generateAppId() {
-        String raw = IDGenerator.MD5.generate().toUpperCase().replaceAll("[^A-Z0-9]", "");
-        return "AK-" + (raw.length() >= 16 ? raw.substring(0, 16) : raw);
     }
 
     /**

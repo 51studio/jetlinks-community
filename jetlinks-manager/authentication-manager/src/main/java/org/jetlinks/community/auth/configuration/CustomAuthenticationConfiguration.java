@@ -109,13 +109,11 @@ public class CustomAuthenticationConfiguration {
     @Bean
     @Order(ApiClientAuthFilter.ORDER)
     public ApiClientAuthFilter apiClientAuthFilter(ApplicationService applicationService,
-                                                   ApiClientTokenService apiClientTokenService,
                                                    ApiClientRateLimiter apiClientRateLimiter,
                                                    ApiClientAccessLogService accessLogService,
                                                    ReactiveAuthenticationManager reactiveAuthenticationManager,
                                                    UserTokenManager userTokenManager) {
         return new ApiClientAuthFilter(applicationService,
-                                       apiClientTokenService,
                                        apiClientRateLimiter,
                                        accessLogService,
                                        reactiveAuthenticationManager,

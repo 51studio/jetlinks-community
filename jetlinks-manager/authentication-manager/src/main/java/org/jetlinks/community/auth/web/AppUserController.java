@@ -174,7 +174,7 @@ public class AppUserController {
                             .onErrorResume(err -> {
                                 log.error("获取 API Client Token 失败: appId={}, error={}", client.getId(), err.getMessage(), err);
                                 return Mono.error(new ResponseStatusException(
-                                    HttpStatus.INTERNAL_SERVER_ERROR, 
+                                    HttpStatus.INTERNAL_SERVER_ERROR,
                                     "Failed to get API client token: " + err.getMessage()));
                             });
                     })
@@ -185,7 +185,7 @@ public class AppUserController {
                     return Mono.error(err);
                 }
                 return Mono.error(new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR, 
+                    HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to get API client token: " + err.getMessage()));
             });
     }

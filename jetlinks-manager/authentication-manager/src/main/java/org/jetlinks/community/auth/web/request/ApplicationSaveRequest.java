@@ -21,6 +21,7 @@ import org.jetlinks.community.auth.entity.ApplicationApiClientConfig;
 import org.jetlinks.community.auth.entity.ApplicationApiServerConfig;
 import org.jetlinks.community.auth.entity.ApplicationPageConfig;
 import org.jetlinks.community.auth.entity.ApplicationSsoConfig;
+import org.jetlinks.community.auth.enums.ApiClientState;
 
 import java.io.Serializable;
 import java.util.List;
@@ -56,5 +57,7 @@ public class ApplicationSaveRequest implements Serializable {
     private ApplicationApiServerConfig apiServer;
 
     private ApplicationSsoConfig sso;
+
+    private ApiClientState state;
 
 }

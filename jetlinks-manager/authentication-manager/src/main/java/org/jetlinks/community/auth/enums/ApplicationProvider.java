@@ -17,9 +17,7 @@ package org.jetlinks.community.auth.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.hswebframework.ezorm.rdb.mapping.annotation.EnumCodec;
 import org.hswebframework.web.dict.I18nEnumDict;
-import org.hswebframework.web.i18n.LocaleUtils;
 import org.jetlinks.community.auth.entity.IntegrationMode;
 
 import java.util.Arrays;

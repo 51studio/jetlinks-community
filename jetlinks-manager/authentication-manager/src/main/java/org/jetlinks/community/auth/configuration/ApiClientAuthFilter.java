@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  * <p>
  * 支持两种认证模式：
  * <ol>
- *   <li><b>Bearer Token</b>：请求头 {@code Authorization: Bearer {token}}，Token 由
+ *   <li><b>Access Token</b>：请求头 {@code X-Access-Token: {token}}，Token 由
  *       {@link ApiClientTokenService#issueToken(String)} 颁发，TTL 24h。</li>
  *   <li><b>签名模式</b>：请求头 {@code X-Client-Id: {appId}}、
  *       {@code X-Client-Sign: {sign}}、{@code X-Timestamp: {epochMs}}，
@@ -74,20 +74,17 @@ public class ApiClientAuthFilter implements WebFilter {
     private static final long SIGN_VALID_MILLIS = 5 * 60 * 1000L;
 
     private final ApplicationService applicationService;
-    private final ApiClientTokenService apiClientTokenService;
     private final ApiClientRateLimiter rateLimiter;
     private final ApiClientAccessLogService accessLogService;
     private final ReactiveAuthenticationManager authenticationManager;
     private final UserTokenManager userTokenManager;
 
     public ApiClientAuthFilter(ApplicationService applicationService,
-                               ApiClientTokenService apiClientTokenService,
                                ApiClientRateLimiter rateLimiter,
                                ApiClientAccessLogService accessLogService,
                                ReactiveAuthenticationManager authenticationManager,
                                UserTokenManager userTokenManager) {
         this.applicationService = applicationService;
-        this.apiClientTokenService = apiClientTokenService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
         this.authenticationManager = authenticationManager;
@@ -99,11 +96,10 @@ public class ApiClientAuthFilter implements WebFilter {
         ServerHttpRequest request = exchange.getRequest();
         HttpHeaders headers = request.getHeaders();
 
-        // 尝试 Bearer Token 模式
-        String authorizationHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
-        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
-            String token = authorizationHeader.substring(7).trim();
-            return handleBearerToken(token, exchange, chain);
+        // 尝试 Access Token 模式
+        String accessToken = headers.getFirst("X-Access-Token");
+        if (StringUtils.hasText(accessToken)) {
+            return handleAccessToken(accessToken, exchange, chain);
         }
 
         // 尝试签名模式
@@ -118,9 +114,9 @@ public class ApiClientAuthFilter implements WebFilter {
         return chain.filter(exchange);
     }
 
-    // ----------------------------- Bearer Token 模式 -----------------------------
+    // ----------------------------- Access Token 模式 -----------------------------
 
-    private Mono<Void> handleBearerToken(String token,
+    private Mono<Void> handleAccessToken(String token,
                                          ServerWebExchange exchange,
                                          WebFilterChain chain) {
         return userTokenManager
@@ -175,7 +171,7 @@ public class ApiClientAuthFilter implements WebFilter {
     private Mono<Void> authenticate(ApplicationEntity client,
                                     ServerWebExchange exchange,
                                     WebFilterChain chain) {
-        if (client.getState() == ApiClientState.disabled) {
+        if (client.getState() != ApiClientState.enabled) {
             return writeError(exchange, HttpStatus.FORBIDDEN, "error.api_client_disabled");
         }
 
@@ -311,6 +307,10 @@ public class ApiClientAuthFilter implements WebFilter {
      * 返回 JSON 格式的错误响应
      */
     private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, String errorCode) {
+        if (exchange.getResponse().isCommitted()) {
+            log.warn("Response already committed, skip writing error: {}", errorCode);
+            return Mono.empty();
+        }
         exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().add(HttpHeaders.CONTENT_TYPE, "application/json;charset=UTF-8");
         String body = "{\"status\":" + status.value() + ",\"code\":\"" + errorCode + "\",\"message\":\"" + errorCode + "\"}";

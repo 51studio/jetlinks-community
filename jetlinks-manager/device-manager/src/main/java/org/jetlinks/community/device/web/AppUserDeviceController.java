@@ -23,6 +23,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.hswebframework.web.authorization.annotation.Resource;
 import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
 import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
@@ -47,6 +48,7 @@ import reactor.core.publisher.Mono;
 @Tag(name = "第三方用户设备绑定接口")
 @AllArgsConstructor
 @Slf4j
+@Resource(id = "device-instance", name = "设备实例")
 public class AppUserDeviceController {
 
     private final AppUserDeviceService deviceService;
