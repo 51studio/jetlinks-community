@@ -16,6 +16,7 @@
 package org.jetlinks.community.configure.doc;
 
 import org.hswebframework.web.api.crud.entity.EntityFactory;
+import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
 import org.springdoc.core.converters.ResponseSupportConverter;
 import org.springdoc.core.providers.ObjectMapperProvider;
 import org.springdoc.webflux.core.configuration.SpringDocWebFluxConfiguration;
@@ -31,6 +32,12 @@ public class SpringDocCustomizerConfiguration {
     public ResponseSupportConverter responseSupportConverter(EntityFactory entityFactory,
                                                              ObjectMapperProvider springDocObjectMapper) {
         return new ResponseWrapperConverter(entityFactory, springDocObjectMapper);
+    }
+
+    @Bean
+    public ApiOperationPermissionMappingCustomizer apiOperationPermissionMappingCustomizer(
+        ApiOperationPermissionMappingService mappingService) {
+        return new ApiOperationPermissionMappingCustomizer(mappingService);
     }
 
 }

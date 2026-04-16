@@ -30,6 +30,7 @@ import org.jetlinks.community.auth.service.ApiClientRateLimiter;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
 import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.AppUserService;
+import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
 import org.jetlinks.community.auth.web.WebFluxUserController;
 import org.jetlinks.core.event.EventBus;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -112,12 +113,14 @@ public class CustomAuthenticationConfiguration {
                                                    ApiClientRateLimiter apiClientRateLimiter,
                                                    ApiClientAccessLogService accessLogService,
                                                    ReactiveAuthenticationManager reactiveAuthenticationManager,
-                                                   UserTokenManager userTokenManager) {
+                                                   UserTokenManager userTokenManager,
+                                                   ApiOperationPermissionMappingService operationMappingService) {
         return new ApiClientAuthFilter(applicationService,
                                        apiClientRateLimiter,
                                        accessLogService,
                                        reactiveAuthenticationManager,
-                                       userTokenManager);
+                                       userTokenManager,
+                                       operationMappingService);
     }
 
     /**

@@ -65,8 +65,14 @@ public class AppUserAuthFilter implements WebFilter {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        String path = exchange.getRequest().getPath().value();
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        log.debug("AppUserAuthFilter intercept: path={}, authHeaderPresent={}", path, authHeader != null);
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (isAppUserProtectedPath(path)) {
+                return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.app_user_not_found");
+            }
             return chain.filter(exchange);
         }
 
@@ -77,6 +83,9 @@ public class AppUserAuthFilter implements WebFilter {
             .flatMap(userToken -> {
                 // 仅处理 app-user 类型的 Token
                 if (!TOKEN_TYPE.equals(userToken.getType())) {
+                    if (isAppUserProtectedPath(path)) {
+                        return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.app_user_not_found");
+                    }
                     return chain.filter(exchange);
                 }
                 // 校验 Token 状态
@@ -110,7 +119,18 @@ public class AppUserAuthFilter implements WebFilter {
                     .switchIfEmpty(Mono.defer(() ->
                         writeError(exchange, HttpStatus.UNAUTHORIZED, "error.app_user_not_found")));
             })
-            .switchIfEmpty(Mono.defer(() -> chain.filter(exchange)));
+            .switchIfEmpty(Mono.defer(() -> {
+                if (isAppUserProtectedPath(path)) {
+                    return writeError(exchange, HttpStatus.UNAUTHORIZED, "error.app_user_not_found");
+                }
+                return chain.filter(exchange);
+            }));
+    }
+
+    private boolean isAppUserProtectedPath(String path) {
+        return path.startsWith("/app/user/")
+            && !path.equals("/app/user/login")
+            && !path.equals("/app/user/register");
     }
 
     private Authentication buildAuthentication(AppUserEntity appUser) {

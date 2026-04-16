@@ -29,6 +29,8 @@ import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientRateLimiter;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
 import org.jetlinks.community.auth.service.ApplicationService;
+import org.jetlinks.community.web.permission.ApiOperationPermission;
+import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -39,8 +41,12 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -78,17 +84,20 @@ public class ApiClientAuthFilter implements WebFilter {
     private final ApiClientAccessLogService accessLogService;
     private final ReactiveAuthenticationManager authenticationManager;
     private final UserTokenManager userTokenManager;
+    private final ApiOperationPermissionMappingService operationMappingService;
 
     public ApiClientAuthFilter(ApplicationService applicationService,
                                ApiClientRateLimiter rateLimiter,
                                ApiClientAccessLogService accessLogService,
                                ReactiveAuthenticationManager authenticationManager,
-                               UserTokenManager userTokenManager) {
+                               UserTokenManager userTokenManager,
+                               ApiOperationPermissionMappingService operationMappingService) {
         this.applicationService = applicationService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
         this.authenticationManager = authenticationManager;
         this.userTokenManager = userTokenManager;
+        this.operationMappingService = operationMappingService;
     }
 
     @Override
@@ -208,7 +217,8 @@ public class ApiClientAuthFilter implements WebFilter {
                 }
                 return auth;
             })
-            .switchIfEmpty(Mono.fromSupplier(() -> buildAuthentication(client)));
+            .switchIfEmpty(Mono.fromSupplier(() -> buildAuthentication(client)))
+            .map(auth -> mergeClientPermissions(auth, client));
 
         return authMono.flatMap(auth ->
             rateLimiter
@@ -263,6 +273,75 @@ public class ApiClientAuthFilter implements WebFilter {
             auth.setPermissions(Collections.emptyList());
         }
         auth.setDimensions(Collections.emptyList());
+
+        return auth;
+    }
+
+    /**
+     * 将应用管理中赋权的权限合并到 Authentication 中。
+     * <p>
+     * 数据库中可能保存的是 Swagger operationId（如 getById_1），
+     * 需要优先通过 {@link ApiOperationPermissionMappingService} 映射为 hswebframework 的
+     * resourceId + actions，再与现有权限合并。
+     */
+    private Authentication mergeClientPermissions(Authentication auth, ApplicationEntity client) {
+        List<PermissionInfo> clientPermissions = client.getPermissions();
+        if (CollectionUtils.isEmpty(clientPermissions)) {
+            return auth;
+        }
+
+        List<org.hswebframework.web.authorization.Permission> existingPerms = auth.getPermissions();
+        if (existingPerms == null) {
+            existingPerms = new ArrayList<>();
+        } else {
+            existingPerms = new ArrayList<>(existingPerms);
+        }
+
+        Map<String, org.hswebframework.web.authorization.Permission> permMap = existingPerms
+            .stream()
+            .collect(Collectors.toMap(org.hswebframework.web.authorization.Permission::getId, p -> p));
+
+        for (PermissionInfo p : clientPermissions) {
+            // 尝试将 operationId 映射为 resourceId + actions
+            ApiOperationPermission mapped = operationMappingService
+                .resolve(p.getPermission())
+                .orElse(null);
+
+            String permId;
+            Set<String> actions = new HashSet<>();
+            if (mapped != null) {
+                permId = mapped.getResourceId();
+                actions.addAll(mapped.getActions());
+            } else {
+                permId = p.getPermission();
+                if (p.getActions() != null) {
+                    actions.addAll(p.getActions());
+                }
+            }
+
+            org.hswebframework.web.authorization.Permission existing = permMap.get(permId);
+            if (existing != null) {
+                Set<String> mergedActions = new HashSet<>(existing.getActions());
+                mergedActions.addAll(actions);
+                permMap.put(permId, SimplePermission
+                    .builder()
+                    .id(existing.getId())
+                    .name(existing.getName())
+                    .actions(mergedActions)
+                    .build());
+            } else {
+                permMap.put(permId, SimplePermission
+                    .builder()
+                    .id(permId)
+                    .name(p.getName() != null ? p.getName() : permId)
+                    .actions(actions)
+                    .build());
+            }
+        }
+
+        if (auth instanceof SimpleAuthentication) {
+            ((SimpleAuthentication) auth).setPermissions(new ArrayList<>(permMap.values()));
+        }
 
         return auth;
     }

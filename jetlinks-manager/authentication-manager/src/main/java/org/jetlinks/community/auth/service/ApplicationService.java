@@ -271,7 +271,8 @@ public class ApplicationService extends GenericReactiveCrudService<ApplicationEn
                     })
                     .collect(Collectors.toList());
                 client.setPermissions(permissionInfos);
-                return updateById(clientId, client);
+                return updateById(clientId, client)
+                    .then(evictCache(clientId));
             })
             .then();
     }

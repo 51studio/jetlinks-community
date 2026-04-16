@@ -23,7 +23,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.hswebframework.web.authorization.annotation.Resource;
+
 import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
 import org.jetlinks.community.auth.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
@@ -48,7 +48,6 @@ import reactor.core.publisher.Mono;
 @Tag(name = "第三方用户设备绑定接口")
 @AllArgsConstructor
 @Slf4j
-@Resource(id = "device-instance", name = "设备实例")
 public class AppUserDeviceController {
 
     private final AppUserDeviceService deviceService;
@@ -161,15 +160,28 @@ public class AppUserDeviceController {
     // -----------------------------------------------------------------------
 
     /**
-     * 从 ReactorContext 获取当前 第三方用户，不存在则返回 401
+     * 从 ReactorContext 获取当前 第三方用户，不存在则返回 401/403
      */
     private Mono<AppUserEntity> currentAppUser() {
-        return Mono.deferContextual(ctx ->
-            Mono.justOrEmpty(ctx.getOrEmpty(AppUserEntity.class))
-                .cast(AppUserEntity.class)
-                .switchIfEmpty(Mono.error(
-                    new ResponseStatusException(HttpStatus.UNAUTHORIZED, "error.app_user_not_found")))
-        );
+        return Mono.deferContextual(ctx -> {
+            AppUserEntity appUser = ctx.getOrEmpty(AppUserEntity.class)
+                .map(obj -> (AppUserEntity) obj)
+                .orElse(null);
+            if (appUser != null) {
+                return Mono.just(appUser);
+            }
+            org.hswebframework.web.authorization.Authentication auth = ctx
+                .getOrEmpty(org.hswebframework.web.authorization.Authentication.class)
+                .map(obj -> (org.hswebframework.web.authorization.Authentication) obj)
+                .orElse(null);
+            if (auth != null && !"app-user".equals(auth.getUser().getUserType())) {
+                log.warn("currentAppUser 被拒绝：请求携带的是 '{}' token，但接口仅接受 app-user", auth.getUser().getUserType());
+                return Mono.error(new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "error.app_user_access_denied"));
+            }
+            return Mono.error(new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "error.app_user_not_found"));
+        });
     }
 
     // -----------------------------------------------------------------------
