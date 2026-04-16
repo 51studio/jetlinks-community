@@ -21,6 +21,7 @@ import org.springdoc.core.converters.ResponseSupportConverter;
 import org.springdoc.core.providers.ObjectMapperProvider;
 import org.springdoc.webflux.core.configuration.SpringDocWebFluxConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -36,8 +37,9 @@ public class SpringDocCustomizerConfiguration {
 
     @Bean
     public ApiOperationPermissionMappingCustomizer apiOperationPermissionMappingCustomizer(
-        ApiOperationPermissionMappingService mappingService) {
-        return new ApiOperationPermissionMappingCustomizer(mappingService);
+        ApiOperationPermissionMappingService mappingService,
+        ApplicationContext applicationContext) {
+        return new ApiOperationPermissionMappingCustomizer(mappingService, applicationContext);
     }
 
 }

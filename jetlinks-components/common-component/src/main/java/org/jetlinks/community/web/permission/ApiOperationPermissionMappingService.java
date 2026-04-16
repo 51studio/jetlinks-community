@@ -42,4 +42,8 @@ public class ApiOperationPermissionMappingService {
     public Optional<ApiOperationPermission> resolve(String operationId) {
         return Optional.ofNullable(mapping.get(operationId));
     }
+
+    public int getMappingCount() {
+        return mapping.size();
+    }
 }

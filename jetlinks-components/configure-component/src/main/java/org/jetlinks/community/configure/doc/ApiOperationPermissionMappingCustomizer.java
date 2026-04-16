@@ -24,27 +24,41 @@ import org.hswebframework.web.authorization.annotation.Resource;
 import org.hswebframework.web.authorization.annotation.ResourceAction;
 import org.hswebframework.web.authorization.annotation.SaveAction;
 import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
+import org.springdoc.api.AbstractOpenApiResource;
 import org.springdoc.core.customizers.GlobalOperationCustomizer;
+import org.springdoc.core.service.OpenAPIService;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.method.HandlerMethod;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * 在 SpringDoc 生成 OpenAPI 文档时，自动建立 operationId -> (resourceId, actions) 的映射。
+ * <p>
+ * 同时实现 {@link ApplicationRunner}，在应用启动时强制触发一次 SpringDoc 构建，
+ * 避免 WebFlux 环境下 SpringDoc 懒加载导致映射表始终为空的问题。
  *
  * @author jetlinks
  * @since 2.11
  */
 @Slf4j
-public class ApiOperationPermissionMappingCustomizer implements GlobalOperationCustomizer {
+public class ApiOperationPermissionMappingCustomizer implements GlobalOperationCustomizer, ApplicationRunner {
 
     private final ApiOperationPermissionMappingService mappingService;
+    private final ApplicationContext applicationContext;
 
-    public ApiOperationPermissionMappingCustomizer(ApiOperationPermissionMappingService mappingService) {
+    public ApiOperationPermissionMappingCustomizer(ApiOperationPermissionMappingService mappingService,
+                                                     ApplicationContext applicationContext) {
         this.mappingService = mappingService;
+        this.applicationContext = applicationContext;
     }
 
     @Override
@@ -80,9 +94,37 @@ public class ApiOperationPermissionMappingCustomizer implements GlobalOperationC
         }
 
         if (!actions.isEmpty()) {
+            log.debug("Register API operation permission mapping: {} -> {}:{}",
+                operation.getOperationId(), resource.id(), actions);
             mappingService.register(operation.getOperationId(), resource.id(), actions);
         }
 
         return operation;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        Map<String, AbstractOpenApiResource> resources = applicationContext.getBeansOfType(AbstractOpenApiResource.class);
+        if (resources.isEmpty()) {
+            log.warn("No AbstractOpenApiResource bean found, API operation permission mapping will not be initialized at startup.");
+            return;
+        }
+
+        for (Map.Entry<String, AbstractOpenApiResource> entry : resources.entrySet()) {
+            try {
+                Field openAPIServiceField = AbstractOpenApiResource.class.getDeclaredField("openAPIService");
+                openAPIServiceField.setAccessible(true);
+                OpenAPIService openAPIService = (OpenAPIService) openAPIServiceField.get(entry.getValue());
+                if (openAPIService != null) {
+                    log.info("Initializing API operation permission mapping for group: {}", entry.getKey());
+                    openAPIService.build(Locale.getDefault());
+                }
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                log.warn("Failed to initialize API operation permission mapping for group {}: {}", entry.getKey(), e.getMessage());
+            }
+        }
+
+        log.info("API operation permission mapping initialized. Total mappings: {}",
+            mappingService.getMappingCount());
     }
 }
