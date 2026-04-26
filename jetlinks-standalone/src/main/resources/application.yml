@@ -316,3 +316,8 @@ trace:
         - "/java/TimeSeriesMessageWriterConnector/writeDeviceMessageToTs"
         - "/java/DeviceStatusMeasurementProvider/incrementOnline"
         - "/java/DeviceMessageMeasurementProvider/incrementMessage"
+messaging:
+    mqtt:
+        enabled: ${MQTT_BROKER_ENABLED:true} #开启mqtt订阅消息支持
+        port: ${MQTT_BROKER_PORT:11883} # 端口
+        host: 0.0.0.0 #绑定网卡

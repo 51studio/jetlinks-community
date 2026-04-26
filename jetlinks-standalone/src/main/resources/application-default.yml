@@ -23,3 +23,7 @@ TIMESCALEDB_FUNCTION_SCHEMA: public # 时序数据所用到相关函数所在的
 ES_URIS: 127.0.0.1:9200
 ES_USERNAME: "" # elasticsearch 用户名
 ES_PASSWORD: "" # elasticsearch 密码
+
+# mqtt broker相关配置
+MQTT_BROKER_ENABLED: true
+MQTT_BROKER_PORT: 11883
