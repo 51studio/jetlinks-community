@@ -18,6 +18,7 @@ package org.jetlinks.community.auth.web;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import org.hswebframework.web.authorization.annotation.Authorize;
 import org.hswebframework.web.exception.BusinessException;
 import org.jetlinks.community.auth.entity.ApplicationEntity;
 import org.jetlinks.community.auth.enums.ApiClientState;
@@ -41,6 +42,7 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/oauth2")
 @AllArgsConstructor
+@Authorize(ignore = true)
 @Tag(name = "OAuth2 认证")
 public class OAuth2Controller {
 
@@ -73,9 +75,9 @@ public class OAuth2Controller {
                 if (app.getState() != ApiClientState.enabled) {
                     return Mono.error(new BusinessException("error.oauth2.client_disabled", 403));
                 }
-                if (app.getApiServer() == null || !Boolean.TRUE.equals(app.getApiServer().getEnableOAuth2())) {
-                    return Mono.error(new BusinessException("error.oauth2.not_enabled", 403));
-                }
+//                if (app.getApiServer() == null || !Boolean.TRUE.equals(app.getApiServer().getEnableOAuth2())) {
+//                    return Mono.error(new BusinessException("error.oauth2.not_enabled", 403));
+//                }
                 return apiClientTokenService
                     .getOrCreateToken(app.getId())
                     .map(token -> OAuth2TokenResponse.of(token, "Bearer", EXPIRES_IN_SECONDS));

@@ -25,6 +25,7 @@ import org.hswebframework.web.authorization.simple.SimpleUser;
 import org.jetlinks.community.auth.entity.ApplicationEntity;
 import org.jetlinks.community.auth.entity.PermissionInfo;
 import org.jetlinks.community.auth.enums.ApiClientState;
+import org.hswebframework.web.system.authorization.api.service.reactive.ReactiveUserService;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientRateLimiter;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
@@ -57,7 +58,7 @@ import java.util.stream.Collectors;
  *   <li><b>Access Token</b>：请求头 {@code X-Access-Token: {token}}，Token 由
  *       {@link ApiClientTokenService#issueToken(String)} 颁发，TTL 24h。</li>
  *   <li><b>签名模式</b>：请求头 {@code X-Client-Id: {appId}}、
- *       {@code X-Client-Sign: {sign}}、{@code X-Timestamp: {epochMs}}，
+ *       {@code X-Sign: {sign}}、{@code X-Timestamp: {epochMs}}，
  *       签名 = {@code HMAC-SHA256(secretKey, "{appId}:{timestamp}")}。</li>
  * </ol>
  * 认证成功后将构造 {@link Authentication} 注入 ReactorContext，后续接口透明使用。
@@ -85,24 +86,34 @@ public class ApiClientAuthFilter implements WebFilter {
     private final ReactiveAuthenticationManager authenticationManager;
     private final UserTokenManager userTokenManager;
     private final ApiOperationPermissionMappingService operationMappingService;
+    private final ReactiveUserService userService;
 
     public ApiClientAuthFilter(ApplicationService applicationService,
                                ApiClientRateLimiter rateLimiter,
                                ApiClientAccessLogService accessLogService,
                                ReactiveAuthenticationManager authenticationManager,
                                UserTokenManager userTokenManager,
-                               ApiOperationPermissionMappingService operationMappingService) {
+                               ApiOperationPermissionMappingService operationMappingService,
+                               ReactiveUserService userService) {
         this.applicationService = applicationService;
         this.rateLimiter = rateLimiter;
         this.accessLogService = accessLogService;
         this.authenticationManager = authenticationManager;
         this.userTokenManager = userTokenManager;
         this.operationMappingService = operationMappingService;
+        this.userService = userService;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
+        String path = request.getPath().value();
+
+        // OAuth2 Token 端点本身就是颁发凭证的入口，无需 API 客户端认证，直接透传
+        if ("/oauth2/token".equals(path)) {
+            return chain.filter(exchange);
+        }
+
         HttpHeaders headers = request.getHeaders();
 
         // 尝试 Access Token 模式
@@ -114,7 +125,7 @@ public class ApiClientAuthFilter implements WebFilter {
         // 尝试签名模式
         String clientId = headers.getFirst("X-Client-Id");
         if (StringUtils.hasText(clientId)) {
-            String sign = headers.getFirst("X-Client-Sign");
+            String sign = headers.getFirst("X-Sign");
             String timestamp = headers.getFirst("X-Timestamp");
             return handleSignature(clientId, sign, timestamp, exchange, chain);
         }
@@ -136,7 +147,8 @@ public class ApiClientAuthFilter implements WebFilter {
                 }
                 return userTokenManager
                     .touch(userToken.getToken())
-                    .then(applicationService.getByClientId(userToken.getUserId()))
+                    .then(userService.findById(userToken.getUserId()))
+                    .flatMap(user -> applicationService.getByAppId(user.getUsername()))
                     .flatMap(client -> authenticate(client, exchange, chain));
             })
             .switchIfEmpty(Mono.defer(() -> chain.filter(exchange)));

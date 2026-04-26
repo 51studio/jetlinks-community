@@ -186,7 +186,7 @@ public class MessagingMqttBroker implements DisposableBean {
      * 认证流程:
      * 1. 使用MQTT的clientId作为访问令牌(token)
      * 2. 通过UserTokenManager验证token有效性
-     * 3. 获取对应的平台用户信息用于后续权限控制
+     * 3. 获取对应的用户认证信息用于后续权限控制
      * <p>
      * 与企业版一致: token作为clientId, username和password为空即可连接
      */
@@ -205,6 +205,11 @@ public class MessagingMqttBroker implements DisposableBean {
             .getByToken(token)
             .map(UserToken::getUserId)
             .flatMap(authenticationManager::getByUserId)
+            .switchIfEmpty(Mono.defer(() -> {
+                endpoint.reject(MqttConnectReturnCode.CONNECTION_REFUSED_BAD_USER_NAME_OR_PASSWORD);
+                log.warn("MQTT客户端令牌无效(clientId):{}", clientId);
+                return Mono.empty();
+            }))
             .flatMap(auth -> {
                 ClientConnection connection = new ClientConnection(clientId, endpoint, auth);
                 ClientConnection existing = connections.putIfAbsent(clientId, connection);

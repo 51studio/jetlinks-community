@@ -28,6 +28,7 @@ import org.jetlinks.community.auth.enums.UserEntityType;
 import org.jetlinks.community.auth.service.ApiClientAccessLogService;
 import org.jetlinks.community.auth.service.ApiClientRateLimiter;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
+import org.hswebframework.web.system.authorization.api.service.reactive.ReactiveUserService;
 import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.AppUserService;
 import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
@@ -114,13 +115,15 @@ public class CustomAuthenticationConfiguration {
                                                    ApiClientAccessLogService accessLogService,
                                                    ReactiveAuthenticationManager reactiveAuthenticationManager,
                                                    UserTokenManager userTokenManager,
-                                                   ApiOperationPermissionMappingService operationMappingService) {
+                                                   ApiOperationPermissionMappingService operationMappingService,
+                                                   ReactiveUserService reactiveUserService) {
         return new ApiClientAuthFilter(applicationService,
                                        apiClientRateLimiter,
                                        accessLogService,
                                        reactiveAuthenticationManager,
                                        userTokenManager,
-                                       operationMappingService);
+                                       operationMappingService,
+                                       reactiveUserService);
     }
 
     /**

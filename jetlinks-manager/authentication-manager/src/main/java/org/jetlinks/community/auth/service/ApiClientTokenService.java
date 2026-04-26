@@ -17,7 +17,10 @@ package org.jetlinks.community.auth.service;
 
 import lombok.AllArgsConstructor;
 import org.hswebframework.web.authorization.token.UserTokenManager;
+import org.hswebframework.web.exception.BusinessException;
 import org.hswebframework.web.id.IDGenerator;
+import org.hswebframework.web.system.authorization.api.entity.UserEntity;
+import org.hswebframework.web.system.authorization.api.service.reactive.ReactiveUserService;
 import org.jetlinks.community.auth.entity.ApplicationEntity;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -42,6 +45,7 @@ public class ApiClientTokenService {
 
     private final UserTokenManager userTokenManager;
     private final ApplicationService applicationService;
+    private final ReactiveUserService userService;
 
     /**
      * 为指定客户端颁发 Bearer Token（TTL 24h）
@@ -51,9 +55,11 @@ public class ApiClientTokenService {
      */
     public Mono<String> issueToken(String clientId) {
         String token = IDGenerator.MD5.generate() + IDGenerator.MD5.generate();
-        return userTokenManager
-            .signIn(token, TOKEN_TYPE, clientId, TOKEN_TTL)
-            .map(userToken -> userToken.getToken());
+        return applicationService.getByClientId(clientId)
+            .flatMap(app -> findVirtualUserId(app.getAppId()))
+            .flatMap(userId -> userTokenManager
+                .signIn(token, TOKEN_TYPE, userId, TOKEN_TTL)
+                .map(userToken -> userToken.getToken()));
     }
 
     /**
@@ -74,11 +80,13 @@ public class ApiClientTokenService {
      * @return Token（不存在时返回 empty）
      */
     public Mono<String> getTokenByClientId(String clientId) {
-        return userTokenManager
-            .getByUserId(clientId)
-            .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
-            .map(userToken -> userToken.getToken())
-            .next();
+        return applicationService.getByClientId(clientId)
+            .flatMap(app -> findVirtualUserId(app.getAppId()))
+            .flatMap(userId -> userTokenManager
+                .getByUserId(userId)
+                .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
+                .map(userToken -> userToken.getToken())
+                .next());
     }
 
     /**
@@ -94,7 +102,20 @@ public class ApiClientTokenService {
         return userTokenManager
             .getByToken(token)
             .filter(userToken -> TOKEN_TYPE.equals(userToken.getType()))
-            .flatMap(userToken -> applicationService.getByClientId(userToken.getUserId()));
+            .flatMap(userToken -> userService.findById(userToken.getUserId()))
+            .flatMap(user -> applicationService.getByAppId(user.getUsername()));
+    }
+
+    /**
+     * 根据应用的 appId 查找对应虚拟用户的 ID。
+     * 虚拟用户在应用创建时由 ApplicationService.createAppUserAndBind() 自动创建，
+     * 其 username = ApplicationEntity.appId。
+     */
+    private Mono<String> findVirtualUserId(String appId) {
+        return userService.findByUsername(appId)
+            .map(UserEntity::getId)
+            .switchIfEmpty(Mono.error(new BusinessException("error.application.virtual_user_not_found",
+                "应用虚拟用户不存在，请确认应用已正确创建")));
     }
 
     /**

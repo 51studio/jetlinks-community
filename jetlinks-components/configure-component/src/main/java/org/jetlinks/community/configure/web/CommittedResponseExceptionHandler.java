@@ -47,33 +47,52 @@ import reactor.core.publisher.Mono;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CommittedResponseExceptionHandler implements WebExceptionHandler {
 
+    private static final String READ_ONLY_HEADERS_CLASS = "org.springframework.http.ReadOnlyHttpHeaders";
+
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
-        // 检查是否是 UnsupportedOperationException 且响应已提交
-        if (ex instanceof UnsupportedOperationException && exchange.getResponse().isCommitted()) {
-            if (log.isDebugEnabled()) {
-                log.debug("Suppressing UnsupportedOperationException for already committed response: {} {}",
-                    exchange.getRequest().getMethod(),
-                    exchange.getRequest().getPath());
-            }
+        // 快速路径：检查是否是 ReadOnlyHttpHeaders 异常且响应已提交
+        if (isReadOnlyHeadersException(ex) && exchange.getResponse().isCommitted()) {
+            logSuppressed(exchange);
             return Mono.empty();
         }
-        
-        // 检查异常链中是否包含 UnsupportedOperationException 且响应已提交
-        Throwable cause = ex.getCause();
+
+        // 检查异常链中是否包含 ReadOnlyHttpHeaders 异常
+        // 注意：不再依赖 isCommitted() 作为必须条件，因为在 Netty 异步写入场景下，
+        // headers 可能已变为只读但 isCommitted() 仍返回 false
+        Throwable cause = ex;
         while (cause != null) {
-            if (cause instanceof UnsupportedOperationException && exchange.getResponse().isCommitted()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Suppressing UnsupportedOperationException (in cause chain) for already committed response: {} {}",
-                        exchange.getRequest().getMethod(),
-                        exchange.getRequest().getPath());
-                }
+            if (isReadOnlyHeadersException(cause)) {
+                logSuppressed(exchange);
                 return Mono.empty();
             }
             cause = cause.getCause();
         }
-        
+
         // 其他异常继续传播
         return Mono.error(ex);
+    }
+
+    /**
+     * 判断异常是否由 ReadOnlyHttpHeaders.set() 引发。
+     * 通过检查堆栈中最顶层的调用类名来判断，避免对 Spring 内部类的硬依赖。
+     */
+    private boolean isReadOnlyHeadersException(Throwable ex) {
+        if (!(ex instanceof UnsupportedOperationException)) {
+            return false;
+        }
+        StackTraceElement[] stackTrace = ex.getStackTrace();
+        if (stackTrace.length > 0) {
+            return READ_ONLY_HEADERS_CLASS.equals(stackTrace[0].getClassName());
+        }
+        return false;
+    }
+
+    private void logSuppressed(ServerWebExchange exchange) {
+        if (log.isDebugEnabled()) {
+            log.debug("Suppressing ReadOnlyHttpHeaders UnsupportedOperationException for response: {} {}",
+                exchange.getRequest().getMethod(),
+                exchange.getRequest().getPath());
+        }
     }
 }
