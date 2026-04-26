@@ -148,20 +148,22 @@ public class AutoDownloadJarProtocolSupportLoader extends JarProtocolSupportLoad
                 .readDataBuffer(webClient, location)
                 .as(dataStream -> {
                     log.debug("download protocol file {} to {}", location, file.getAbsolutePath());
-                    //写出文件
+                    //写出文件，使用CREATE_NEW避免下载失败时创建空文件
                     return DataBufferUtils
-                        .write(dataStream, file.toPath(), CREATE, WRITE)
+                        .write(dataStream, file.toPath(), CREATE_NEW, WRITE)
                         .thenReturn(file.getAbsolutePath());
                 })
                 //使用弹性线程池来写出文件
                 .subscribeOn(Schedulers.boundedElastic())
                 //设置本地文件路径
                 .doOnNext(path -> config.put("location", path))
-                .then(super.load(newDef))
+                .then(Mono.defer(() -> super.load(newDef)))
+                .cast(ProtocolSupport.class)
                 .timeout(loadTimeout, Mono.error(() -> new TimeoutException("获取协议文件失败:" + location)))
                 //失败时删除文件
                 .doOnError(err -> file.delete())
-                ;
+                //下载失败时，尝试使用该协议任意旧缓存文件进行降级加载
+                .onErrorResume(err -> loadFallbackCacheFile(newDef, config, location, err));
         }
 
         //使用文件管理器获取文件
@@ -193,6 +195,49 @@ public class AutoDownloadJarProtocolSupportLoader extends JarProtocolSupportLoad
             .write(fileManager.read(fileId),
                    path, CREATE_NEW, TRUNCATE_EXISTING, WRITE)
             .thenReturn(file);
+    }
+
+    /**
+     * 下载失败时降级使用旧缓存文件加载协议
+     */
+    private Mono<ProtocolSupport> loadFallbackCacheFile(ProtocolSupportDefinition def,
+                                                        Map<String, Object> config,
+                                                        String location,
+                                                        Throwable err) {
+        File fallbackFile = findFallbackCacheFile(def.getId());
+        if (fallbackFile != null) {
+            log.warn("download protocol file [{}] failed, fallback to cached file: {}", location, fallbackFile.getName(), err);
+            config.put("location", fallbackFile.getAbsolutePath());
+            return super
+                .load(def)
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(e -> fallbackFile.delete())
+                .map(p -> p);
+        }
+        return Mono.error(err);
+    }
+
+    /**
+     * 在缓存目录中查找指定协议的任意旧缓存文件，用于远程下载失败时降级加载
+     *
+     * @param protocolId 协议 ID
+     * @return 旧缓存文件，不存在时返回 null
+     */
+    private File findFallbackCacheFile(String protocolId) {
+        File[] files = tempPath.listFiles(
+            (dir, name) -> name.startsWith(protocolId + "_") && name.endsWith(".jar")
+        );
+        if (files != null && files.length > 0) {
+            // 取最新修改的文件作为降级目标
+            File best = files[0];
+            for (File f : files) {
+                if (f.lastModified() > best.lastModified()) {
+                    best = f;
+                }
+            }
+            return best;
+        }
+        return null;
     }
 
 }
