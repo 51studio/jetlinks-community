@@ -181,6 +181,7 @@ logging:
         org.jetlinks.community.timeseries.micrometer: warn
         org.jetlinks.community.elastic.search.service.reactive: trace
         org.jetlinks.community.network: warn
+        org.jetlinks.community.network.mqtt.gateway.messaging: info
         io.vertx.mqtt.impl: warn
         org.jetlinks.supports.scalecube.rpc: warn
         "org.jetlinks.community.buffer": warn

@@ -102,14 +102,20 @@ public class MessagingMqttBroker implements DisposableBean {
      */
     public void start() {
         int instanceCount = Math.max(1, properties.getInstance());
+        log.info("MQTT消息订阅Broker正在启动, host:{}, port:{}, instanceCount:{}",
+            properties.getHost(), properties.getPort(), instanceCount);
         for (int i = 0; i < instanceCount; i++) {
+            final int idx = i;
             createMqttServer()
                 .doOnSuccess(server -> {
                     synchronized (servers) {
                         servers.add(server);
                     }
                 })
-                .subscribe();
+                .subscribe(
+                    success -> {},
+                    error -> log.error("MQTT消息订阅Broker实例[{}]启动失败", idx, error)
+                );
         }
     }
 
@@ -243,6 +249,18 @@ public class MessagingMqttBroker implements DisposableBean {
     }
 
     /**
+     * 将JetLinks EventBus的Topic模式转换为MQTT订阅Topic
+     * MQTT: ** → JetLinks: #
+     * MQTT: * → JetLinks: +
+     */
+    private static String toMqttTopic(String eventBusTopic) {
+        if (eventBusTopic.contains("*")) {
+            return eventBusTopic.replace("**", "#").replace("*", "+");
+        }
+        return eventBusTopic;
+    }
+
+    /**
      * 将EventBus消息序列化为JSON字符串
      */
     private static String toJsonPayload(TopicPayload topicPayload) {
@@ -335,9 +353,12 @@ public class MessagingMqttBroker implements DisposableBean {
 
                 // 避免重复订阅
                 if (subscriptions.containsKey(mqttTopic)) {
+                    log.debug("MQTT客户端[{}]重复订阅同一Topic,已跳过: {}", userId, mqttTopic);
                     continue;
                 }
 
+                log.info("MQTT客户端[{}]订阅Topic, mqttTopic:{}, eventBusTopic:{}",
+                    userId, mqttTopic, eventBusTopic);
                 Disposable eventSub = eventBus
                     .subscribe(
                         Subscription.of(
@@ -349,13 +370,15 @@ public class MessagingMqttBroker implements DisposableBean {
                     .publishOn(Schedulers.parallel())
                     .subscribe(
                         topicPayload -> {
+                            log.info("响应订阅JetLinks Topic, mqttTopic:{}, eventBusTopic:{}",
+                                mqttTopic, topicPayload.getTopic());
                             if (!endpoint.isConnected()) {
                                 return;
                             }
                             String jsonPayload = toJsonPayload(topicPayload);
                             Buffer buffer = Buffer.buffer(jsonPayload);
                             endpoint.publish(
-                                mqttTopic,
+                                toMqttTopic(topicPayload.getTopic()),
                                 buffer,
                                 MqttQoS.valueOf(qos),
                                 false,

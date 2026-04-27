@@ -211,10 +211,10 @@ public class AutoDownloadJarProtocolSupportLoader extends JarProtocolSupportLoad
             return super
                 .load(def)
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnError(e -> fallbackFile.delete())
                 .map(p -> p);
         }
-        return Mono.error(err);
+        log.warn("协议文件 [{}] 下载失败且无可用降级缓存, 协议 [{}] 加载将跳过", location, def.getId(), err);
+        return Mono.empty();
     }
 
     /**

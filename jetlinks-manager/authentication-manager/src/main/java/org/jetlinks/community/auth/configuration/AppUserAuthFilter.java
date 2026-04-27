@@ -148,10 +148,6 @@ public class AppUserAuthFilter implements WebFilter {
     }
 
     private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, String errorCode) {
-        if (exchange.getResponse().isCommitted()) {
-            log.warn("Response already committed, skip writing error: {}", errorCode);
-            return Mono.empty();
-        }
         exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().add(HttpHeaders.CONTENT_TYPE, "application/json;charset=UTF-8");
         String body = "{\"status\":" + status.value() + ",\"code\":\"" + errorCode + "\",\"message\":\"" + errorCode + "\"}";

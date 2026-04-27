@@ -33,7 +33,7 @@ public class MessagingMqttProperties {
     /**
      * 是否启用MQTT平台消息订阅功能
      */
-    private boolean enabled = false;
+    private boolean enabled = true;
 
     /**
      * 绑定网卡地址

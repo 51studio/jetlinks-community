@@ -187,7 +187,11 @@ public class LocalProtocolSupportManager
 
     @Override
     public void run(String... args) {
-        init();
+        try {
+            init();
+        } catch (Throwable err) {
+            log.warn("协议管理器初始化失败，应用将继续启动:", err);
+        }
     }
 
 
