@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.service;
+package org.jetlinks.community.auth.appuser.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.hswebframework.ezorm.core.param.TermType;
@@ -24,7 +24,7 @@ import org.hswebframework.web.authorization.token.UserTokenManager;
 import org.hswebframework.web.crud.service.GenericReactiveCrudService;
 import org.hswebframework.web.exception.BusinessException;
 import org.hswebframework.web.id.IDGenerator;
-import org.jetlinks.community.auth.entity.AppUserEntity;
+import org.jetlinks.community.auth.appuser.entity.AppUserEntity;
 import org.jetlinks.community.auth.enums.ApiClientState;
 import org.jetlinks.community.auth.service.ApplicationService;
 import org.apache.commons.codec.digest.DigestUtils;

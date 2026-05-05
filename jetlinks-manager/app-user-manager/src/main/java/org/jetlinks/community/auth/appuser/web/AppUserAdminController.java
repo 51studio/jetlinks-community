@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.web;
+package org.jetlinks.community.auth.appuser.web;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,11 +28,11 @@ import org.hswebframework.web.authorization.annotation.QueryAction;
 import org.hswebframework.web.authorization.annotation.Resource;
 import org.hswebframework.web.authorization.annotation.SaveAction;
 import org.hswebframework.web.crud.web.reactive.ReactiveServiceCrudController;
-import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
-import org.jetlinks.community.auth.entity.AppUserEntity;
-import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
-import org.jetlinks.community.auth.service.AppUserDeviceService;
-import org.jetlinks.community.auth.service.AppUserService;
+import org.jetlinks.community.auth.appuser.entity.AppUserDeviceEntity;
+import org.jetlinks.community.auth.appuser.entity.AppUserEntity;
+import org.jetlinks.community.auth.appuser.enums.AppUserDeviceRelationType;
+import org.jetlinks.community.auth.appuser.service.AppUserDeviceService;
+import org.jetlinks.community.auth.appuser.service.AppUserService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;

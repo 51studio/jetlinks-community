@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.web;
+package org.jetlinks.community.auth.appuser.web;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -22,10 +22,10 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.jetlinks.community.auth.entity.AppUserEntity;
+import org.jetlinks.community.auth.appuser.entity.AppUserEntity;
 import org.jetlinks.community.auth.service.ApplicationService;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
-import org.jetlinks.community.auth.service.AppUserService;
+import org.jetlinks.community.auth.appuser.service.AppUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;

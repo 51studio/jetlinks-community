@@ -30,7 +30,6 @@ import org.jetlinks.community.auth.service.ApiClientRateLimiter;
 import org.jetlinks.community.auth.service.ApiClientTokenService;
 import org.hswebframework.web.system.authorization.api.service.reactive.ReactiveUserService;
 import org.jetlinks.community.auth.service.ApplicationService;
-import org.jetlinks.community.auth.service.AppUserService;
 import org.jetlinks.community.web.permission.ApiOperationPermissionMappingService;
 import org.jetlinks.community.auth.web.WebFluxUserController;
 import org.jetlinks.core.event.EventBus;
@@ -92,17 +91,6 @@ public class CustomAuthenticationConfiguration {
         return builder -> {
             builder.deserializerByType(UserEntityType.class, new UserEntityTypeJSONDeserializer());
         };
-    }
-
-    /**
-     * 注册 第三方用户认证过滤器
-     */
-    @Bean
-    @Order(AppUserAuthFilter.ORDER)
-    public AppUserAuthFilter appUserAuthFilter(AppUserService appUserService,
-                                               UserTokenManager userTokenManager,
-                                               ApplicationService applicationService) {
-        return new AppUserAuthFilter(appUserService, userTokenManager, applicationService);
     }
 
     /**

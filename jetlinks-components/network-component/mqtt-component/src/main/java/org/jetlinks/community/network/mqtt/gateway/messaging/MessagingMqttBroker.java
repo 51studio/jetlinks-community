@@ -370,8 +370,8 @@ public class MessagingMqttBroker implements DisposableBean {
                     .publishOn(Schedulers.parallel())
                     .subscribe(
                         topicPayload -> {
-                            log.info("响应订阅JetLinks Topic, mqttTopic:{}, eventBusTopic:{}",
-                                mqttTopic, topicPayload.getTopic());
+                            log.info("MQTT客户端[{}]消费Topic, mqttTopic:{}, eventBusTopic:{}",
+                                     userId, mqttTopic, topicPayload.getTopic());
                             if (!endpoint.isConnected()) {
                                 return;
                             }

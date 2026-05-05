@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.service;
+package org.jetlinks.community.auth.appuser.service;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hswebframework.web.crud.service.GenericReactiveCrudService;
 import org.hswebframework.web.exception.BusinessException;
-import org.jetlinks.community.auth.entity.AppUserDeviceEntity;
-import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
+import org.jetlinks.community.auth.appuser.entity.AppUserDeviceEntity;
+import org.jetlinks.community.auth.appuser.enums.AppUserDeviceRelationType;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;

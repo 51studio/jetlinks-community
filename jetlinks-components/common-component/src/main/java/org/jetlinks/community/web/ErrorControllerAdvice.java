@@ -43,6 +43,22 @@ import java.util.stream.Collectors;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ErrorControllerAdvice {
 
+    private static final String READ_ONLY_HEADERS_CLASS = "org.springframework.http.ReadOnlyHttpHeaders";
+
+    /**
+     * Suppress ReadOnlyHttpHeaders exception when response is already committed.
+     * In Spring 6.2.x + Netty, EncoderHttpMessageWriter may call setContentLength()
+     * on a response whose headers are already read-only.
+     */
+    @ExceptionHandler
+    public Mono<Void> handleReadOnlyHeadersException(UnsupportedOperationException ex) {
+        if (ex.getStackTrace().length > 0
+            && READ_ONLY_HEADERS_CLASS.equals(ex.getStackTrace()[0].getClassName())) {
+            return Mono.empty(); // response committed, suppress
+        }
+        return Mono.error(ex);
+    }
+
     @ExceptionHandler
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Mono<ResponseMessage<?>> handleException(DecodingException decodingException) {

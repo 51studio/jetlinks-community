@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.enums;
+package org.jetlinks.community.auth.appuser.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jetlinks.community.auth.entity;
+package org.jetlinks.community.auth.appuser.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
@@ -26,7 +26,7 @@ import org.hswebframework.web.api.crud.entity.GenericEntity;
 import org.hswebframework.web.crud.annotation.EnableEntityEvent;
 import org.hswebframework.web.crud.generator.Generators;
 import org.hswebframework.web.validator.CreateGroup;
-import org.jetlinks.community.auth.enums.AppUserDeviceRelationType;
+import org.jetlinks.community.auth.appuser.enums.AppUserDeviceRelationType;
 
 import javax.persistence.Column;
 import javax.persistence.GeneratedValue;

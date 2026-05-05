@@ -13,6 +13,7 @@
     <artifactId>jetlinks-manager</artifactId>
     <modules>
         <module>authentication-manager</module>
+        <module>app-user-manager</module>
         <module>device-manager</module>
         <module>network-manager</module>
         <module>notify-manager</module>

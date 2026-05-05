@@ -252,6 +252,12 @@
 
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>app-user-manager</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>network-manager</artifactId>
             <version>${project.version}</version>
         </dependency>
